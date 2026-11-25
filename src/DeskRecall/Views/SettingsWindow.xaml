@@ -1,0 +1,766 @@
+<Window x:Class="DeskRecall.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DeskRecall – Einstellungen" Width="1000" Height="700" MinWidth="820" MinHeight="520"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource PanelBrush}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" Foreground="{StaticResource TextBrush}"
+        Icon="/Assets/DeskRecall.ico" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Navigation -->
+        <Border Background="{StaticResource BgBrush}" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
+            <DockPanel Margin="12,16,12,12">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8,0,0,18">
+                    <Image Source="{StaticResource LogoImage}" Width="22" Height="22" />
+                    <TextBlock Text="DeskRecall" FontFamily="{StaticResource DisplayFont}" FontSize="16" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Bottom" Text="Lokal · ohne Telemetrie · ohne Adminrechte" Style="{StaticResource DimText}" FontSize="11" Foreground="{StaticResource TextFaintBrush}" Margin="8,8,0,0" />
+                <ListBox Style="{StaticResource NavListBox}" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Glyph}" Style="{StaticResource IconText}" FontSize="15" Width="20" Margin="2,0,12,0" />
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Seiten -->
+        <Grid Grid.Column="1">
+                <!-- ===== Allgemein ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=general}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Allgemein" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Start, Hintergrundbetrieb und Verhalten des Widgets." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding StartWithWindows}">
+                                <StackPanel>
+                                    <TextBlock Text="Mit Windows starten" />
+                                    <TextBlock Text="DeskRecall startet nach der Anmeldung automatisch (ohne Administratorrechte)." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding RunInBackground}">
+                                <StackPanel>
+                                    <TextBlock Text="Im Hintergrund ausführen" />
+                                    <TextBlock Text="Beim Schließen des Widgets läuft DeskRecall im Infobereich weiter." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding AutoRestoreOnStartup}">
+                                <StackPanel>
+                                    <TextBlock Text="Automatisch wiederherstellen" />
+                                    <TextBlock Text="Nach dem Windows-Start die letzte Sitzung wiederherstellen." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ShowTrayIcon}">
+                                <StackPanel>
+                                    <TextBlock Text="Symbol im Infobereich anzeigen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <TextBlock Text="Widget-Verhalten" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Position" />
+                                    <TextBlock Text="Bildschirmrand, an dem das Widget sitzt." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding DockOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Dock}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Anzeigemodus" />
+                                    <TextBlock Text="Ausklappbar, immer sichtbar, automatisch ausblenden oder nur im Infobereich." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding ModeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding DisplayMode}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Breite" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="260" Maximum="400" TickFrequency="4" IsSnapToTickEnabled="True" Value="{Binding WidgetWidth}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding WidgetWidth, StringFormat='{}{0} px'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Transparenz" />
+                                    <TextBlock Text="Deckkraft des Widget-Hintergrunds." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="30" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Opacity}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat='{}{0} %'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Verhalten im Vollbild" />
+                                    <TextBlock Text="Bei Spielen, Videos und Präsentationen." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding FullscreenOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding Fullscreen}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding AlwaysOnTop}">
+                                <StackPanel>
+                                    <TextBlock Text="Immer im Vordergrund" />
+                                    <TextBlock Text="Das Widget bleibt über anderen Fenstern, nimmt aber nie den Fokus." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource DimText}" Margin="0,18,0,0" Foreground="{StaticResource TextFaintBrush}" />
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Sicherung ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=backup}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Sicherung" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Wann und was gesichert wird. Alle Daten bleiben lokal auf diesem PC." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Automatische Sicherung" />
+                                    <TextBlock Text="„Bei jeder Änderung“ sichert kurz nach dem Öffnen, Schließen oder Verschieben von Fenstern." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding SaveModeOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding SaveMode}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding SaveOnShutdown}">
+                                <StackPanel>
+                                    <TextBlock Text="Beim Herunterfahren sichern" />
+                                    <TextBlock Text="Vor Abmelden, Neustart und Herunterfahren den Zustand festhalten." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Anzahl Sicherungen im Verlauf" />
+                                    <TextBlock Text="Unveränderte Zustände werden nicht doppelt gespeichert." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="5" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding HistoryCount}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding HistoryCount, StringFormat='{}{0}'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding StoreWindowTitles}">
+                                <StackPanel>
+                                    <TextBlock Text="Fenstertitel speichern" />
+                                    <TextBlock Text="Hilft bei der Zuordnung mehrerer Fenster (z. B. Browser). Ohne Titel wird nach Größe und Position zugeordnet." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CaptureDocumentPaths}">
+                                <StackPanel>
+                                    <TextBlock Text="Geöffnete Dokumente merken" />
+                                    <TextBlock Text="Nur echte Dateipfade aus der Befehlszeile – nie Passwörter, Cookies oder Browserdaten." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Style="{StaticResource PrimaryButton}" Content="Jetzt sichern" Command="{Binding SaveNowCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Datenordner öffnen" Command="{Binding Diagnostics.OpenDataFolderCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Verlauf leeren" Command="{Binding History.ClearCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                        <TextBlock Text="Sitzungsverlauf" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}" Padding="6">
+                            <StackPanel>
+                                <TextBlock Text="Noch keine Sicherungen vorhanden." Style="{StaticResource DimText}" Margin="10,8" Visibility="{Binding History.Items.Count, Converter={StaticResource ZeroToVis}}" />
+                                <ItemsControl ItemsSource="{Binding History.Items}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="H" CornerRadius="6" Padding="10,7" Background="Transparent">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="&#xE823;" Style="{StaticResource IconText}" Foreground="{StaticResource TextDimBrush}" Margin="0,0,12,0" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{Binding When}" />
+                                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource DimText}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding KindText}" Style="{StaticResource DimText}" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="{StaticResource TextFaintBrush}" />
+                                                    <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE777;" ToolTip="Wiederherstellen"
+                                                            Command="{Binding DataContext.History.RestoreCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                    <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Löschen"
+                                                            Command="{Binding DataContext.History.DeleteCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                                </Grid>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <Trigger SourceName="H" Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="H" Property="Background" Value="{StaticResource HoverBrush}" />
+                                                </Trigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Wiederherstellung ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=restore}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Wiederherstellung" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Wie DeskRecall Programme startet und Fenster zurück auf ihre Desktops bringt." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Verzögerung nach dem Start" />
+                                    <TextBlock Text="Windows und Autostart-Programme erst zur Ruhe kommen lassen." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="0" Maximum="60" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding StartupDelay}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding StartupDelay, StringFormat='{}{0} s'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding LaunchMissingApps}">
+                                <StackPanel>
+                                    <TextBlock Text="Fehlende Programme starten" />
+                                    <TextBlock Text="Bereits laufende Programme werden nie doppelt gestartet." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Maximale Wartezeit pro Fenster" />
+                                    <TextBlock Text="Langsame Programme (Ladebildschirme) bekommen so viel Zeit." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="10" Maximum="180" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding WindowTimeout}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding WindowTimeout, StringFormat='{}{0} s'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Abstand zwischen Programmstarts" />
+                                    <TextBlock Text="Verteilt die Last beim Start." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="0" Maximum="3000" TickFrequency="100" IsSnapToTickEnabled="True" Value="{Binding LaunchStagger}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding LaunchStagger, StringFormat='{}{0} ms'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding RestoreExplorerFolders}">
+                                <StackPanel>
+                                    <TextBlock Text="Explorer-Ordner wiederherstellen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding UseBrowserSessionRestore}">
+                                <StackPanel>
+                                    <TextBlock Text="Browser-Sitzungen über den Browser wiederherstellen" />
+                                    <TextBlock Text="Firefox, Chrome, Edge, Brave, Vivaldi und Opera stellen ihre Tabs selbst wieder her – DeskRecall startet sie nur und platziert die Fenster." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ActivateLastDesktop}">
+                                <StackPanel>
+                                    <TextBlock Text="Zuletzt aktiven Desktop aktivieren" />
+                                    <TextBlock Text="Am Ende genau einmal zum zuletzt benutzten Desktop wechseln." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Programme mit Administratorrechten" />
+                                    <TextBlock Text="Ohne Zustimmung wird nie mit erhöhten Rechten gestartet." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding ElevationOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding ElevatedApps}" />
+                            </Grid>
+                        </Border>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Style="{StaticResource PrimaryButton}" Content="Letzte Sitzung jetzt wiederherstellen" Command="{Binding RestoreNowCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Probelauf (ohne Änderungen)" Command="{Binding DryRunCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                        <Border Style="{StaticResource SettingsCard}" Visibility="{Binding DryRunResult, Converter={StaticResource NullToVis}}">
+                            <TextBlock Text="{Binding DryRunResult}" Style="{StaticResource DimText}" LineHeight="18" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Programmregeln ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=rules}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Programmregeln" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Feste Regeln haben Vorrang vor der gespeicherten Sitzung. Pro Eigenschaft gilt die oberste passende Regel." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="300" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <Border Style="{StaticResource SettingsCard}" Padding="4" MinHeight="280">
+                                    <ListBox ItemsSource="{Binding Rules.Items}" SelectedItem="{Binding Rules.Selected}" Background="Transparent" BorderThickness="0"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ItemContainerStyle="{StaticResource NavItem}">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox Style="{StaticResource LilacCheckBox}" IsChecked="{Binding Enabled}" ToolTip="Regel aktiv" />
+                                                    <Grid Grid.Column="1" Width="20" Height="20" Margin="10,0,10,0">
+                                                        <Border CornerRadius="4" Background="{StaticResource AccentSoftBrush}" />
+                                                        <TextBlock Text="&#xE737;" Style="{StaticResource IconText}" FontSize="10" Foreground="{StaticResource AccentLightBrush}" />
+                                                        <Image Source="{Binding Icon}" Width="20" Height="20" />
+                                                    </Grid>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="{StaticResource AccentLightBrush}" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Border>
+                                <WrapPanel>
+                                    <Button Style="{StaticResource SecondaryButton}" Content="Neue Regel" Command="{Binding Rules.AddCommand}" Margin="0,0,6,6" />
+                                    <Button Style="{StaticResource SquareButton}" Content="&#xE74A;" ToolTip="Nach oben (Regeln weiter oben haben Vorrang)" Command="{Binding Rules.MoveUpCommand}" Margin="0,0,6,6" />
+                                    <Button Style="{StaticResource SquareButton}" Content="&#xE74B;" ToolTip="Nach unten" Command="{Binding Rules.MoveDownCommand}" Margin="0,0,6,6" />
+                                    <Button Style="{StaticResource SquareButton}" Content="&#xE74D;" ToolTip="Regel löschen" Command="{Binding Rules.RemoveCommand}" Margin="0,0,6,6" />
+                                </WrapPanel>
+                                <TextBlock Text="Aus laufendem Programm:" Style="{StaticResource DimText}" Margin="0,8,0,4" />
+                                <ComboBox x:Name="RunningAppsCombo" ItemsSource="{Binding Rules.RunningApps}" DropDownOpened="RunningAppsCombo_DropDownOpened" SelectionChanged="RunningAppsCombo_SelectionChanged">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,8,0" />
+                                                <TextBlock Text="{Binding Name}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <Border Grid.Column="2" Style="{StaticResource SettingsCard}" Padding="18,14" VerticalAlignment="Top"
+                                    Visibility="{Binding Rules.HasSelection, Converter={StaticResource BoolToVis}}">
+                                <StackPanel DataContext="{Binding Rules.Selected}">
+                                    <TextBlock Text="Name" Style="{StaticResource DimText}" Margin="0,0,0,4" />
+                                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Text="Programm (Prozessname, z. B. Discord oder steam)" Style="{StaticResource DimText}" Margin="0,12,0,4" />
+                                    <TextBox Text="{Binding ProcessName, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBlock Text="Nur Fenster, deren Titel enthält (optional)" Style="{StaticResource DimText}" Margin="0,12,0,4" />
+                                    <TextBox Text="{Binding TitleContains, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Text="Ziel-Desktop" Style="{StaticResource DimText}" Margin="0,12,0,4" />
+                                    <ComboBox ItemsSource="{Binding DataContext.Rules.DesktopOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding TargetDesktop}" />
+                                    <TextBlock Text="Monitor" Style="{StaticResource DimText}" Margin="0,12,0,4" />
+                                    <ComboBox ItemsSource="{Binding DataContext.Rules.MonitorOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding TargetMonitorId}" />
+                                    <TextBlock Text="Startzustand" Style="{StaticResource DimText}" Margin="0,12,0,4" />
+                                    <ComboBox ItemsSource="{Binding DataContext.Rules.StateOptions, RelativeSource={RelativeSource AncestorType=Window}}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding StartState}" />
+                                    <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ApplyLive}" Margin="0,16,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Live anwenden" />
+                                            <TextBlock Text="Auch auf neu geöffnete Fenster im laufenden Betrieb." Style="{StaticResource DimText}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding NeverAutoStart}" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Nie automatisch starten" />
+                                            <TextBlock Text="Läuft das Programm, wird sein Fenster trotzdem platziert." Style="{StaticResource DimText}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Exclude}" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Vollständig ausschließen" />
+                                            <TextBlock Text="Wird weder gesichert noch wiederhergestellt." Style="{StaticResource DimText}" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Profile ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=profiles}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Profile" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Gespeicherte Arbeitsumgebungen, z. B. Arbeit, Gaming oder Videobearbeitung." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}" Padding="4">
+                            <ListBox ItemsSource="{Binding Profiles.Items}" SelectedItem="{Binding Profiles.Selected}" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource NavItem}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="&#xE81E;" Style="{StaticResource IconText}" Foreground="{StaticResource AccentLightBrush}" Margin="0,0,12,0" />
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Detail}" Style="{StaticResource DimText}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2" Text="&#xE73E;" Style="{StaticResource IconText}" Foreground="{StaticResource AccentLightBrush}" ToolTip="Aktives Profil"
+                                                       Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Style="{StaticResource PrimaryButton}" Content="Laden" Command="{Binding Profiles.LoadCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Neu aus aktuellem Zustand" Command="{Binding Profiles.CreateCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Aktualisieren" Command="{Binding Profiles.UpdateCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Als aktiv setzen" Command="{Binding Profiles.SetActiveCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Umbenennen" Command="{Binding Profiles.RenameCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Duplizieren" Command="{Binding Profiles.DuplicateCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Exportieren …" Command="{Binding Profiles.ExportCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Importieren …" Command="{Binding Profiles.ImportCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource DangerButton}" Content="Löschen" Command="{Binding Profiles.DeleteCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource DimText}" Margin="0,8,0,0" Text="„Standard“ ist immer die automatisch gesicherte letzte Sitzung. Beim Laden eines Profils werden fehlende Programme gestartet; geöffnete Programme werden nur nach ausdrücklicher Bestätigung geschlossen." />
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Erscheinungsbild ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=appearance}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Erscheinungsbild" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Aussehen des Widgets." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Acrylic}">
+                                <StackPanel>
+                                    <TextBlock Text="Acryl-Effekt" />
+                                    <TextBlock Text="Unscharfer, durchscheinender Hintergrund. Ohne Acryl wird eine einfarbige Fläche verwendet." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Animations}">
+                                <StackPanel>
+                                    <TextBlock Text="Animationen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Größe" />
+                                    <TextBlock Text="Skalierung des Widgets zusätzlich zur Windows-Skalierung." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="75" Maximum="150" TickFrequency="5" IsSnapToTickEnabled="True" Value="{Binding Scale}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Scale, StringFormat='{}{0} %'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Breite" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="260" Maximum="400" TickFrequency="4" IsSnapToTickEnabled="True" Value="{Binding WidgetWidth}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding WidgetWidth, StringFormat='{}{0} px'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="64" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Transparenz" />
+                                </StackPanel>
+                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="30" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Opacity}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat='{}{0} %'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Virtuelle Desktops ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=desktops}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Virtuelle Desktops" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="DeskRecall nutzt die Desktop-Funktionen von Windows 11 über eine austauschbare Kompatibilitätsschicht." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CreateMissingDesktops}">
+                                <StackPanel>
+                                    <TextBlock Text="Fehlende Desktops erstellen" />
+                                    <TextBlock Text="Gab es beim Sichern mehr Desktops, werden sie angelegt." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding RestoreNamesAndOrder}">
+                                <StackPanel>
+                                    <TextBlock Text="Namen und Reihenfolge wiederherstellen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Kompatibilitätsmodus" />
+                                    <TextBlock Text="Nur ändern, wenn die automatische Erkennung nach einem Windows-Update nicht funktioniert." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="260" ItemsSource="{Binding ApiOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding ApiOverride}" />
+                            </Grid>
+                        </Border>
+                        <TextBlock Text="Status" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding DesktopBackend}" TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding DesktopList}" Margin="0,10,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Style="{StaticResource DimText}" Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Style="{StaticResource SecondaryButton}" Content="Neu verbinden" Command="{Binding ReinitDesktopsCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Monitore ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=monitors}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Monitore" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Mehrere Monitore, Auflösungen und Skalierung." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding ScaleOnResolutionChange}">
+                                <StackPanel>
+                                    <TextBlock Text="Bei geänderter Auflösung proportional anpassen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CorrectOffscreenWindows}">
+                                <StackPanel>
+                                    <TextBlock Text="Fenster außerhalb des Bildschirms zurückholen" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Fehlender Monitor" />
+                                    <TextBlock Text="Wohin Fenster eines nicht mehr angeschlossenen Monitors kommen." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Width="220" ItemsSource="{Binding MonitorFallbackOptions}" DisplayMemberPath="Label" SelectedValuePath="Value" SelectedValue="{Binding MonitorFallback}" />
+                            </Grid>
+                        </Border>
+                        <TextBlock Text="Angeschlossene Monitore" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <ItemsControl ItemsSource="{Binding MonitorList}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Margin="0,3" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Style="{StaticResource SecondaryButton}" Content="Aktualisieren" Command="{Binding RefreshMonitorsCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Ausnahmen ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=exclusions}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Ausnahmen" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Programme und Fenster, die DeskRecall ignoriert." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <TextBlock Text="Programme" Style="{StaticResource SectionText}" />
+                        <TextBlock Text="Prozessnamen ohne .exe – z. B. Passwort-Manager oder Systemprogramme." Style="{StaticResource DimText}" Margin="0,0,0,8" />
+                        <Border Style="{StaticResource SettingsCard}" Padding="8">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding ExcludedProcesses}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="6,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Entfernen"
+                                                        Command="{Binding DataContext.RemoveExcludedProcessCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Margin="6,8,6,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding NewExcludedProcess, UpdateSourceTrigger=PropertyChanged}" ToolTip="Prozessname, z. B. KeePassXC" />
+                                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Height="32" Content="Hinzufügen" Margin="8,0,0,0" Command="{Binding AddExcludedProcessCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Fenstertitel" Style="{StaticResource SectionText}" />
+                        <TextBlock Text="Fenster, deren Titel diesen Text enthält (z. B. „Privat“ oder „InPrivate“)." Style="{StaticResource DimText}" Margin="0,0,0,8" />
+                        <Border Style="{StaticResource SettingsCard}" Padding="8">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding ExcludedTitles}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="6,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE711;" ToolTip="Entfernen"
+                                                        Command="{Binding DataContext.RemoveExcludedTitleCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid Margin="6,8,6,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding NewExcludedTitle, UpdateSourceTrigger=PropertyChanged}" ToolTip="Text im Fenstertitel" />
+                                    <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Height="32" Content="Hinzufügen" Margin="8,0,0,0" Command="{Binding AddExcludedTitleCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Diagnose ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=diagnostics}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Diagnose" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Systeminformationen und Protokoll zur Fehlersuche. Es werden keine Daten versendet." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <TextBlock Text="{Binding Diagnostics.Report}" TextWrapping="Wrap" LineHeight="20" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
+                        </Border>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Style="{StaticResource SecondaryButton}" Content="Protokollordner öffnen" Command="{Binding Diagnostics.OpenLogFolderCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Datenordner öffnen" Command="{Binding Diagnostics.OpenDataFolderCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Bericht kopieren" Command="{Binding Diagnostics.CopyLogCommand}" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource SecondaryButton}" Content="Desktops neu verbinden" Command="{Binding ReinitDesktopsCommand}" Margin="0,0,8,8" />
+                        </WrapPanel>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding Diagnostics.VerboseLogging}">
+                                <TextBlock Text="Ausführliches Protokoll" />
+                            </CheckBox>
+                        </Border>
+                        <TextBlock Text="Letzte Wiederherstellung" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <TextBlock Text="{Binding Diagnostics.LastRestore}" Style="{StaticResource DimText}" LineHeight="18" />
+                        </Border>
+                        <TextBlock Text="Protokoll" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}" Padding="8" Height="300">
+                            <ListBox ItemsSource="{Binding Diagnostics.Entries}" Background="Transparent" BorderThickness="0" ItemContainerStyle="{StaticResource PlainItem}"
+                                     VirtualizingPanel.IsVirtualizing="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas" FontSize="11.5" Margin="2,1"
+                                                   Foreground="{Binding Level, Converter={StaticResource LevelBrush}}">
+                                            <Run Text="{Binding Time, StringFormat='HH:mm:ss', Mode=OneWay}" />
+                                            <Run Text="{Binding LevelTag, Mode=OneWay}" />
+                                            <Run Text="{Binding Source, Mode=OneWay}" />
+                                            <Run Text="{Binding Message, Mode=OneWay}" Foreground="{StaticResource TextBrush}" />
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

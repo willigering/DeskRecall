@@ -1,0 +1,22 @@
+<Application x:Class="DeskRecall.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:DeskRecall.Converters"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisInv" Invert="True" />
+            <conv:NullToVisibilityConverter x:Key="NullToVis" />
+            <conv:InverseBoolConverter x:Key="InvBool" />
+            <conv:EnumEqualsConverter x:Key="EnumEq" />
+            <conv:FormatConverter x:Key="Fmt" />
+            <conv:ZeroToVisibilityConverter x:Key="ZeroToVis" />
+            <conv:KeyToVisibilityConverter x:Key="KeyVis" />
+            <conv:LogLevelToBrushConverter x:Key="LevelBrush" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
