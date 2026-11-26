@@ -71,6 +71,8 @@ public sealed class RestoreItem
     public bool WasLaunched { get; set; }
     /// <summary>Prozess lief schon ohne Fenster und wurde einmal zusätzlich gestartet.</summary>
     public bool WakeAttempted { get; set; }
+    /// <summary>Für einen Browser im Hintergrund wurde schon nach der Anmeldung gefragt.</summary>
+    public bool SignInOffered { get; set; }
     public DateTimeOffset? WaitDeadline { get; set; }
 
     public override string ToString() => $"{Saved.FriendlyName}: {Status} {Message}";

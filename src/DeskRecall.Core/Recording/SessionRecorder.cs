@@ -1,5 +1,6 @@
 using System.Reflection;
 using DeskRecall.Core.Abstractions;
+using DeskRecall.Core.Apps;
 using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
@@ -23,6 +24,9 @@ public sealed class SessionRecorder : ISessionRecorder
     private readonly Func<AppSettings> _settings;
     private readonly ILogService _log;
     private readonly string? _windowsVersion;
+
+    /// <summary>Beim letzten Profil-Snapshot ausgelassene Fenster (Teams-Anruf, Teams-Chat).</summary>
+    public IReadOnlyList<string> LastOmissions { get; private set; } = Array.Empty<string>();
 
     public SessionRecorder(IWindowManager windows, IVirtualDesktopService desktops, IMonitorManager monitors, IRuleEngine rules,
         Func<AppSettings> settings, ILogService log, string? windowsVersion = null)
@@ -65,6 +69,7 @@ public sealed class SessionRecorder : ISessionRecorder
         catch (Exception ex) { _log.Error("Sicherung", "Fenster konnten nicht ermittelt werden", ex); windows = Array.Empty<WindowRecord>(); }
 
         var excludedProcs = s.Exclusions.ProcessNames.Select(AppIdentity.NormalizeProcessName).ToHashSet();
+        var captured = new List<WindowRecord>();
         foreach (var w0 in windows)
         {
             if (excludedProcs.Contains(AppIdentity.NormalizeProcessName(w0.ProcessName))) continue;
@@ -76,9 +81,26 @@ public sealed class SessionRecorder : ISessionRecorder
             var mon = snapshot.Monitors.FirstOrDefault(m => m.Id == w.MonitorId)
                       ?? MonitorRemapper.MonitorForRect(w.NormalBounds, snapshot.Monitors);
             w.Snap = SnapLayoutMath.Classify(w.NormalBounds, w.State, mon);
-            if (!s.Backup.StoreWindowTitles) w.Title = "";
             if (!s.Backup.CaptureDocumentPaths) w.DocumentPath = null;
-            snapshot.Windows.Add(w);
+            captured.Add(w);
+        }
+
+        LastOmissions = Array.Empty<string>();
+        if (kind == SessionKind.Profile)
+        {
+            var (kept, omitted) = TeamsWindows.OmitUnrestorable(captured);
+            if (!s.Backup.StoreWindowTitles) foreach (var w in kept) w.Title = "";
+            snapshot.Windows.AddRange(kept);
+            if (omitted.Count > 0)
+            {
+                LastOmissions = omitted.Select(w => $"{w.FriendlyName}: {w.DisplayTitle}").ToList();
+                _log.Info("Sicherung", "Nicht in den Snapshot übernommen (nicht wiederherstellbar): " + string.Join(", ", LastOmissions));
+            }
+        }
+        else
+        {
+            if (!s.Backup.StoreWindowTitles) foreach (var w in captured) w.Title = "";
+            snapshot.Windows.AddRange(captured);
         }
         return snapshot;
     }

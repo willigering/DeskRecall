@@ -2,13 +2,13 @@
 
 **Desktop- und Sitzungsmanager für Windows 11** – speichert Ihre Arbeitsumgebung (Programme, virtuelle Desktops, Fensterpositionen, Monitore, Explorer-Ordner) und stellt sie nach einem Neustart automatisch wieder her.
 
-Version 1.2.1 · © 2026 Willi Gering, Gering Digital
+Version 1.2.2 · © 2026 Willi Gering, Gering Digital
 
 ---
 
 ## Schnellstart
 
-1. **Portable Version:** `DeskRecall-1.2.1-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
+1. **Portable Version:** `DeskRecall-1.2.2-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
    Die Datei `portable.flag` neben der EXE sorgt dafür, dass alle Daten im Unterordner `Daten` liegen. Löschen Sie sie, wenn die Daten stattdessen unter `%LOCALAPPDATA%\DeskRecall` liegen sollen.
 2. Beim ersten Start trägt sich DeskRecall in den Autostart ein (`HKCU\…\Run`, ohne Administratorrechte – abschaltbar unter *Einstellungen → Allgemein*).
 3. Arbeiten Sie normal. DeskRecall sichert automatisch bei jeder Änderung (und zusätzlich alle 2 Minuten als Sicherheitsnetz).
@@ -32,6 +32,7 @@ Alternativ: `DeskRecall-win-x64` (framework-abhängig, klein) benötigt die **.N
 - Über das Karten-Kontextmenü lässt sich die gespeicherte Fensteranordnung wiederherstellen.
 - **Schließen** (✕ an der Zeile oder Kontextmenü): beendet die App nur für diese Sitzung. Die Zeile bleibt **ausgegraut** stehen und wird beim nächsten Systemstart wieder geöffnet. Das Startprofil ändert sich dadurch nicht.
 - **Snapshot:** richtet die Desktops ein, benennt das Profil. Genau dieser offene Zustand (nicht die ausgegrauten Zeilen) wird beim nächsten Systemstart geladen.
+- **Herunterfahren:** sichert die Sitzung, solange die Fenster noch offen sind, fordert Programme per normalem Schließen zum Speichern auf und fährt Windows danach herunter (wie das Startmenü, ohne erzwungenes Beenden). Ein Speichern-Dialog bleibt bedienbar. Derselbe Befehl steht im Tray-Menü.
 - Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Neuer Desktop, **Desktop duplizieren** (gleicher Name + gleiche Explorer-Ordner), Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Für diese Sitzung schließen, Desktop schließen).
 - Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab). Bei einer anderen Karte wechselt schon der erste Klick sofort den Desktop; während des Umbenennens wechselt ein Klick nicht.
 - Chevron an der Karte → auf-/zuklappen.
@@ -83,6 +84,8 @@ DeskRecall stellt die **Fensteranordnung** wieder her, nicht den **inneren Zusta
 - Programme öffnen nach dem Start, was **sie selbst** vorsehen. Browser stellen Tabs über ihre eigene Sitzungswiederherstellung wieder her (in Chrome/Edge/Brave/Vivaldi/Opera ggf. „Beim Start: Da weitermachen, wo ich aufgehört habe“ aktivieren; in Firefox „Vorherige Sitzung wiederherstellen“).
 - Dokumente/Projekte werden nur dann wieder geöffnet, wenn das Programm sie als Befehlszeilenargument erhalten hatte (z. B. VS Code, Visual Studio, Notepad++, Photoshop beim Öffnen per Doppelklick). Programme, die Projekte intern öffnen (z. B. DaVinci Resolve), starten mit ihrer eigenen Startseite/letztem Projekt.
 - Programme mit mehreren gleichartigen Fenstern ohne aussagekräftigen Titel werden bestmöglich nach Größe/Position zugeordnet.
+- Teams: ein Snapshot speichert nur das Hauptfenster („Microsoft Teams“). Anrufe und herausgelöste Chats werden nicht gespeichert und nicht wiederhergestellt.
+- Läuft ein Browser schon im Hintergrund (angemeldet, aber ohne Fenster), fragt DeskRecall einmal nach. „Anmelden“ öffnet den Browser, die Anmeldung macht der Browser selbst. Es wird kein Passwort gespeichert oder gelesen.
 - Browser-Tabs: DeskRecall sieht nur, was die Tableiste per UI Automation zeigt (Titel und Auswahl, keine URLs). Eigene Tab-Namen hängen daher am Titel – ändert eine Seite ihren Titel stark, greift der eigene Name nicht mehr. Tabs in Firefox lassen sich je nach Version etwas weniger zuverlässig auswählen als in Chromium-Browsern. Tab-Gruppen und eingeklappte Gruppen zeigt der Browser ggf. nicht als einzelne Tabs.
 - Explorer: pro Explorer-Fenster wird der Ordner des aktiven Tabs wiederhergestellt, nicht alle Tabs.
 - Programme, die mit Administratorrechten liefen, startet DeskRecall nur nach Ihrer Zustimmung (UAC). Fenster solcher Programme kann eine Anwendung ohne Adminrechte nicht verschieben (Windows-Sicherheitsgrenze).

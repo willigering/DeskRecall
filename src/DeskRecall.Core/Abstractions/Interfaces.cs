@@ -86,6 +86,15 @@ public interface IElevationConsent
     Task<bool> ConfirmAsync(string appName, CancellationToken ct);
 }
 
+/// <summary>
+/// Fragt, ob ein bereits laufender Browser geöffnet werden soll, damit der Benutzer sich dort anmeldet.
+/// Das Passwort bleibt im Browser. DeskRecall sieht es nicht.
+/// </summary>
+public interface IBrowserSignInPrompt
+{
+    Task<bool> ConfirmAsync(string browserName, CancellationToken ct);
+}
+
 public interface IClock
 {
     DateTimeOffset Now { get; }

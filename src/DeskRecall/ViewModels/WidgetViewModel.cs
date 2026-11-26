@@ -234,6 +234,7 @@ public sealed class WidgetViewModel : ObservableObject
         MinimizeAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) foreach (var w in a.Windows) await _desktops.MinimizeAsync(w.Handle); });
         CloseAppCommand = new AsyncRelayCommand(CloseAppAsync);
         SnapshotCommand = new AsyncRelayCommand(() => _controller.TakeSnapshotAsync(), () => !_controller.IsRestoring);
+        ShutdownCommand = new AsyncRelayCommand(() => _controller.ShutdownComputerAsync(), () => !_controller.IsRestoring && !_controller.IsShuttingDown);
         PinAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) { foreach (var w in a.Windows) await _desktops.PinWindowAsync(w.Handle, true); await _controller.RefreshAsync(); } }, _ => _desktops.CanManage);
         RestoreCommand = new AsyncRelayCommand(RestoreAsync, () => !_controller.IsRestoring);
         SaveCommand = new AsyncRelayCommand(SaveAsync);
@@ -331,6 +332,7 @@ public sealed class WidgetViewModel : ObservableObject
     public AsyncRelayCommand MinimizeAppCommand { get; }
     public AsyncRelayCommand CloseAppCommand { get; }
     public AsyncRelayCommand SnapshotCommand { get; }
+    public AsyncRelayCommand ShutdownCommand { get; }
     public string StartupHint
     {
         get

@@ -144,7 +144,8 @@ public partial class App : Application
         sc.AddSingleton<IDialogService>(sp => sp.GetRequiredService<DialogService>());
         sc.AddSingleton<ISessionRestorer>(sp => new SessionRestorer(sp.GetRequiredService<IWindowManager>(), sp.GetRequiredService<IVirtualDesktopService>(),
             sp.GetRequiredService<IProcessManager>(), sp.GetRequiredService<IMonitorManager>(), sp.GetRequiredService<IRuleEngine>(), log,
-            consent: sp.GetRequiredService<DialogService>()));
+            consent: sp.GetRequiredService<DialogService>(),
+            browserSignIn: sp.GetRequiredService<DialogService>()));
         sc.AddSingleton<IInstalledAppSource, StartMenuAppSource>();
         sc.AddSingleton<UpdateController>();
         sc.AddSingleton<IconService>();
@@ -212,6 +213,8 @@ public partial class App : Application
         if (updates.HasUpdate)
             menu.Items.Add(Item(updates.NoticeText ?? "Aktualisierung installieren", "\uE895", () => updates.InstallCommand.Execute(null)));
         menu.Items.Add(Item("Einstellungen", "\uE713", () => OpenSettings()));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Windows herunterfahren", "\uE7E8", () => _ = c.ShutdownComputerAsync(), !c.IsRestoring && !c.IsShuttingDown));
         menu.Items.Add(Item("Beenden", "\uE7E8", () => Shutdown()));
         return menu;
     }

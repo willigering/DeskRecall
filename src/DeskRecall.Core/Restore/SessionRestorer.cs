@@ -32,16 +32,18 @@ public sealed class SessionRestorer : ISessionRestorer
     private readonly ILogService _log;
     private readonly IClock _clock;
     private readonly IElevationConsent? _consent;
+    private readonly IBrowserSignInPrompt? _browserSignIn;
     private readonly Func<string, bool> _directoryExists;
     private readonly Func<string, bool> _fileExists;
     private int _running;
 
     public SessionRestorer(IWindowManager windows, IVirtualDesktopService desktops, IProcessManager processes, IMonitorManager monitors,
         IRuleEngine rules, ILogService log, IClock? clock = null, IElevationConsent? consent = null,
-        Func<string, bool>? directoryExists = null, Func<string, bool>? fileExists = null)
+        Func<string, bool>? directoryExists = null, Func<string, bool>? fileExists = null,
+        IBrowserSignInPrompt? browserSignIn = null)
     {
         _windows = windows; _desktops = desktops; _processes = processes; _monitors = monitors;
-        _rules = rules; _log = log; _clock = clock ?? SystemClock.Instance; _consent = consent;
+        _rules = rules; _log = log; _clock = clock ?? SystemClock.Instance; _consent = consent; _browserSignIn = browserSignIn;
         _directoryExists = directoryExists ?? Directory.Exists;
         _fileExists = fileExists ?? File.Exists;
     }
@@ -124,6 +126,7 @@ public sealed class SessionRestorer : ISessionRestorer
                 _log.Info(Src, $"Angeheftet: {w.FriendlyName} → Desktop {w.DesktopIndex + 1}");
             }
         }
+        KeepOnlyTeamsMainWindow(report);
         var total = report.Items.Count;
 
         // 3. Bereits laufende Fenster zuordnen
@@ -137,7 +140,7 @@ public sealed class SessionRestorer : ISessionRestorer
         {
             var now = _clock.Now;
             foreach (var i in pending.Where(i => i.Status == RestoreItemStatus.Pending))
-                i.WaitDeadline = now + (i.Saved.Kind == AppKind.Browser ? o.WindowTimeout : o.RunningAppGrace);
+                i.WaitDeadline = now + o.RunningAppGrace;
             await ExecuteLaunchesAsync(pending, o, report, progress, total, wake: false, ct).ConfigureAwait(false);
 
             // 5. Auf Fenster warten und zuordnen. Läuft ein Programm schon, zeigt aber kein Fenster
@@ -150,6 +153,7 @@ public sealed class SessionRestorer : ISessionRestorer
                 if (waiting.Count == 0) break;
                 var t = _clock.Now;
                 var wake = new List<RestoreItem>();
+                var signIn = new List<RestoreItem>();
                 foreach (var i in waiting.Where(i => i.WaitDeadline is { } d && t > d))
                 {
                     if (i.WasLaunched)
@@ -162,10 +166,38 @@ public sealed class SessionRestorer : ISessionRestorer
                         i.WakeAttempted = true;
                         wake.Add(i);
                     }
+                    else if (!i.SignInOffered && i.Saved.Kind == AppKind.Browser && _browserSignIn is not null && !o.DryRun)
+                    {
+                        i.SignInOffered = true;
+                        signIn.Add(i);
+                    }
                     else
                     {
                         i.Status = RestoreItemStatus.Skipped;
                         i.Message = "läuft bereits, aber ohne passendes Fenster (z. B. nur im Infobereich)";
+                    }
+                }
+                if (signIn.Count > 0)
+                {
+                    foreach (var group in signIn.GroupBy(i => AppIdentity.NormalizeProcessName(i.Saved.ProcessName)))
+                    {
+                        var name = group.First().Saved.FriendlyName;
+                        bool open = false;
+                        try { open = await _browserSignIn!.ConfirmAsync(name, ct).ConfigureAwait(false); }
+                        catch (Exception ex) { _log.Warn(Src, $"Anmeldung für {name} konnte nicht gefragt werden.", ex); }
+                        if (open)
+                        {
+                            _log.Info(Src, $"{name}: Anmeldung im Browser angefragt.");
+                            foreach (var i in group) { i.WakeAttempted = true; wake.Add(i); }
+                        }
+                        else
+                        {
+                            foreach (var i in group)
+                            {
+                                i.Status = RestoreItemStatus.Skipped;
+                                i.Message = "Anmeldung übersprungen – Browser bleibt im Hintergrund";
+                            }
+                        }
                     }
                 }
                 if (wake.Count > 0)
@@ -415,6 +447,21 @@ public sealed class SessionRestorer : ISessionRestorer
         }
         item.TargetBounds = bounds;
         item.TargetMonitor = target;
+    }
+
+    /// <summary>Teams wird einmal gestartet. Nur das Hauptfenster wird platziert, Chat- und Raumfenster nicht abgewartet.</summary>
+    private static void KeepOnlyTeamsMainWindow(RestoreReport report)
+    {
+        var teams = report.Items.Where(i => i.Status == RestoreItemStatus.Pending && TeamsWindows.IsTeamsProcess(i.Saved.ProcessName)).ToList();
+        if (teams.Count == 0) return;
+        var main = TeamsWindows.ChooseMain(teams.Select(i => i.Saved).ToList());
+        if (teams.Count == 1 && main is not null) return;
+        foreach (var i in teams)
+        {
+            if (main is not null && ReferenceEquals(i.Saved, main)) continue;
+            i.Status = RestoreItemStatus.Skipped;
+            i.Message = "Nebenfenster – Teams-Anruf oder Chat wird nicht wiederhergestellt";
+        }
     }
 
     private static bool IsExcluded(WindowRecord w, RestoreOptions o)
