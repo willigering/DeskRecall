@@ -1,3 +1,4 @@
+using System.Globalization;
 using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
@@ -223,9 +224,38 @@ public class HistoryRetentionTests
     [Fact]
     public void Formats_relative_german_labels()
     {
+        // now trägt die gewünschte Zone (hier MEZ); die Systemzeitzone darf das Ergebnis nicht verändern.
         var now = new DateTimeOffset(2026, 11, 25, 21, 0, 0, TimeSpan.FromHours(1));
         Assert.Equal("Heute, 20:45 Uhr", HistoryRetention.FormatRelative(now.AddMinutes(-15), now));
         Assert.Equal("Gestern, 22:15 Uhr", HistoryRetention.FormatRelative(new DateTimeOffset(2026, 11, 24, 22, 15, 0, TimeSpan.FromHours(1)), now));
+    }
+
+    [Fact]
+    public void Format_uses_the_offset_of_now_not_the_system_time_zone()
+    {
+        var nowUtc = new DateTimeOffset(2026, 11, 25, 20, 0, 0, TimeSpan.Zero);
+        var time = new DateTimeOffset(2026, 11, 25, 20, 45, 0, TimeSpan.FromHours(1)); // 19:45 UTC
+        Assert.Equal("Heute, 19:45 Uhr", HistoryRetention.FormatRelative(time, nowUtc));
+    }
+
+    [Fact]
+    public void Weekday_labels_stay_german_regardless_of_current_culture()
+    {
+        var previous = CultureInfo.CurrentCulture;
+        var previousUi = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+            var now = new DateTimeOffset(2026, 11, 25, 21, 0, 0, TimeSpan.FromHours(1)); // Mittwoch
+            var monday = new DateTimeOffset(2026, 11, 23, 10, 0, 0, TimeSpan.FromHours(1));
+            Assert.Equal("Montag, 10:00 Uhr", HistoryRetention.FormatRelative(monday, now));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+            CultureInfo.CurrentUICulture = previousUi;
+        }
     }
 }
 

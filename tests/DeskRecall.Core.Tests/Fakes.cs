@@ -114,3 +114,65 @@ internal sealed class FakeMonitors : IMonitorManager
     public List<MonitorInfo> Monitors { get; } = new() { T.Mon("M1", 0, 0, 1920, 1080, primary: true) };
     public IReadOnlyList<MonitorInfo> GetMonitors() => Monitors;
 }
+
+/// <summary>Virtuelle Uhr: Delay schaltet die Zeit weiter und führt fällige Termine aus, ohne echte Wartezeit.</summary>
+internal sealed class FakeClock : DeskRecall.Core.Abstractions.IClock
+{
+    readonly List<(DateTimeOffset Due, Action Action)> _scheduled = new();
+    TaskCompletionSource? _paused;
+    TaskCompletionSource? _resume;
+
+    public DateTimeOffset Now { get; private set; } = new(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1));
+
+    public void Schedule(TimeSpan delay, Action action) => _scheduled.Add((Now + delay, action));
+
+    /// <summary>Nächstes Delay hält an, bis <see cref="Resume"/> kommt – für Tests auf gleichzeitige Aufrufe.</summary>
+    public void Pause()
+    {
+        _resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public Task WaitUntilPaused() => _paused?.Task ?? Task.CompletedTask;
+
+    public void Resume()
+    {
+        var resume = _resume;
+        _resume = null;
+        _paused = null;
+        resume?.TrySetResult();
+    }
+
+    public async Task Delay(TimeSpan delay, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        Advance(delay);
+        var paused = _paused;
+        var resume = _resume;
+        if (paused is not null && resume is not null)
+        {
+            paused.TrySetResult();
+            await resume.Task.WaitAsync(ct);
+        }
+        else
+            await Task.Yield();
+        ct.ThrowIfCancellationRequested();
+    }
+
+    public void Advance(TimeSpan delay)
+    {
+        var target = Now + delay;
+        while (_scheduled.Count > 0)
+        {
+            var next = 0;
+            for (var i = 1; i < _scheduled.Count; i++)
+                if (_scheduled[i].Due < _scheduled[next].Due) next = i;
+            if (_scheduled[next].Due > target) break;
+            var item = _scheduled[next];
+            _scheduled.RemoveAt(next);
+            Now = item.Due;
+            item.Action();
+        }
+        Now = target;
+    }
+}

@@ -214,12 +214,17 @@ public static class HistoryRetention
             .ToList();
     }
 
+    /// <summary>
+    /// Relative deutsche Zeitangabe. Tag und Uhrzeit gelten in der Zeitzone von <paramref name="now"/>
+    /// (in der App <c>DateTimeOffset.Now</c>, also die lokale Zone des Rechners), nicht in der Systemzone
+    /// unabhängig von <paramref name="now"/>. Wochentage und Datumsformat sind immer de-DE.
+    /// </summary>
     public static string FormatRelative(DateTimeOffset time, DateTimeOffset now)
     {
         var de = CultureInfo.GetCultureInfo("de-DE");
-        var local = time.ToLocalTime();
+        var local = time.ToOffset(now.Offset);
         var day = local.Date;
-        var today = now.ToLocalTime().Date;
+        var today = now.Date;
         var clock = local.ToString("HH:mm", de) + " Uhr";
         if (day == today) return "Heute, " + clock;
         if (day == today.AddDays(-1)) return "Gestern, " + clock;
