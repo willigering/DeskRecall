@@ -93,19 +93,6 @@
                                 <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Jetzt suchen" Command="{Binding Updates.CheckNowCommand}" MinWidth="140" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
-                        <Border Style="{StaticResource SettingsCard}" Visibility="{Binding Updates.HasUpdate, Converter={StaticResource BoolToVis}}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                    <TextBlock Text="{Binding Updates.NoticeText}" FontWeight="SemiBold" />
-                                    <TextBlock Text="Ihre Sitzungsdaten bleiben beim Aktualisieren erhalten." Style="{StaticResource DimText}" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="Jetzt aktualisieren" Command="{Binding Updates.InstallCommand}" MinWidth="160" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
                         <TextBlock Text="Widget-Verhalten" Style="{StaticResource SectionText}" />
                         <Border Style="{StaticResource SettingsCard}">
                             <Grid>

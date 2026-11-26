@@ -7,13 +7,13 @@
     <SatelliteResourceLanguages>de</SatelliteResourceLanguages>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
-    <!-- Version: 1.2.6, Build-Nummer kommt aus build-number.txt (wird von build.ps1/build.sh bei jedem Build erhöht; CI erhöht sie nicht) -->
+    <!-- Version: 1.2.7, Build-Nummer kommt aus build-number.txt (wird von build.ps1/build.sh bei jedem Build erhöht; CI erhöht sie nicht) -->
     <BuildNumber Condition="'$(BuildNumber)'=='' and Exists('$(MSBuildThisFileDirectory)build-number.txt')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)build-number.txt').Trim())</BuildNumber>
     <BuildNumber Condition="'$(BuildNumber)'==''">1</BuildNumber>
-    <Version>1.2.6</Version>
-    <AssemblyVersion>1.2.6.0</AssemblyVersion>
-    <FileVersion>1.2.6.$(BuildNumber)</FileVersion>
-    <InformationalVersion>1.2.6 (Build $(BuildNumber))</InformationalVersion>
+    <Version>1.2.7</Version>
+    <AssemblyVersion>1.2.7.0</AssemblyVersion>
+    <FileVersion>1.2.7.$(BuildNumber)</FileVersion>
+    <InformationalVersion>1.2.7 (Build $(BuildNumber))</InformationalVersion>
 
     <Authors>Willi Gering</Authors>
     <Company>Gering Digital</Company>
