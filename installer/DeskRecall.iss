@@ -3,7 +3,7 @@
 #ifndef BuildNumber
   #define BuildNumber "1"
 #endif
-#define AppVersion "1.1.1"
+#define AppVersion "1.2.0"
 
 [Setup]
 AppId={{6C4E9B2A-7D31-4F0E-9A57-DE5C1A0B8F42}

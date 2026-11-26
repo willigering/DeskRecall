@@ -13,8 +13,8 @@ public static class DesktopCardInput
     public enum HeaderAction { None, Switch, CommitRename, BeginRename }
 
     /// <summary>
-    /// Klick auf den Desktop-Namen. Ein Doppelklick öffnet nur die Umbenennung und wechselt den Desktop nicht.
-    /// Den Einfachklick in der Oberfläche um die Doppelklick-Wartezeit verzögern, sonst würde der erste Klick wechseln.
+    /// Klick auf den Desktop-Namen. Ein Doppelklick öffnet die Umbenennung.
+    /// Ab 1.2.0 wird ein Einfachklick auf eine andere Karte nicht mehr um die Doppelklick-Zeit verzögert (siehe <see cref="NameClickSwitchesImmediately"/>).
     /// Während der Umbenennung wird der Name übernommen, der Desktop wechselt nicht.
     /// </summary>
     public static HeaderAction OnNameClick(bool isEditing, bool isDoubleClick, bool clickOnRenameBox, bool clickOnButton)
@@ -34,6 +34,12 @@ public static class DesktopCardInput
         if (clickOnButton || clickOnRenameBox) return HeaderAction.None;
         return isEditing ? HeaderAction.CommitRename : HeaderAction.Switch;
     }
+
+    /// <summary>
+    /// Ein Klick auf den Namen einer anderen (nicht aktiven) Karte wechselt sofort – ohne auf einen möglichen
+    /// Doppelklick zu warten. Auf der aktiven Karte gibt es nichts zu wechseln; dort bleibt der Doppelklick fürs Umbenennen.
+    /// </summary>
+    public static bool NameClickSwitchesImmediately(bool cardIsActive) => !cardIsActive;
 
     public static bool ShouldCommitOnOutsideClick(bool isEditing, bool clickOnRenameBox) =>
         isEditing && !clickOnRenameBox;

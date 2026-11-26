@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 using DeskRecall.Core.Abstractions;
 using DeskRecall.Core.Apps;
+using DeskRecall.Core.Browsers;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
@@ -19,6 +21,7 @@ public sealed class AppRowViewModel : ObservableObject
     private ImageSource? _icon;
     private string _title = "";
     private int _windowCount = 1;
+    private int _tabCount;
     private bool _isWindowsExpanded;
     private bool _lastRunning, _lastMinimized;
     private long _lastPrimaryHandle;
@@ -28,12 +31,12 @@ public sealed class AppRowViewModel : ObservableObject
     public string? ExecutablePath { get; init; }
     public string? AppUserModelId { get; init; }
     public List<WindowRecord> Windows { get; set; } = new();
-    public ObservableCollection<WindowRecord> WindowItems { get; } = new();
+    public ObservableCollection<WindowItemViewModel> WindowItems { get; } = new();
     public long PrimaryHandle => AppRowInput.MostRecent(Windows)?.Handle ?? 0;
     public bool IsWindowsExpanded
     {
         get => _isWindowsExpanded;
-        set => Set(ref _isWindowsExpanded, AppRowInput.ShouldKeepExpanded(WindowCount, value));
+        set => Set(ref _isWindowsExpanded, AppRowInput.ShouldKeepExpanded(WindowCount, value, TabCount));
     }
     public Guid DesktopId { get; init; }
     public bool IsPinnedEntry { get; set; }
@@ -42,28 +45,52 @@ public sealed class AppRowViewModel : ObservableObject
 
     public ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
     public string Title { get => _title; set => Set(ref _title, value); }
-    public int WindowCount { get => _windowCount; set { if (Set(ref _windowCount, value)) OnPropertyChanged(nameof(HasMultipleWindows)); } }
+    public int WindowCount { get => _windowCount; set { if (Set(ref _windowCount, value)) NotifyExpandable(); } }
+    /// <summary>Tabs, wenn genau ein Browserfenster da ist (sonst stehen die Tabs unter den Fensterzeilen).</summary>
+    public int TabCount { get => _tabCount; private set { if (Set(ref _tabCount, value)) NotifyExpandable(); } }
     public bool HasMultipleWindows => WindowCount > 1;
+    public bool CanExpand => AppRowInput.CanExpand(WindowCount, TabCount);
+    public string BadgeText => WindowCount > 1 ? WindowCount.ToString() : TabCount.ToString();
+    public string BadgeToolTip => WindowCount > 1 ? $"{WindowCount} Fenster – auf- oder zuklappen" : $"{TabCount} Tabs – auf- oder zuklappen";
     public bool IsMinimized => IsRunning && Windows.All(w => w.State == WindowShowState.Minimized);
     public string ToolTipText =>
         IsPinnedEntry && !IsRunning ? $"{AppName}\nAngepinnt – klicken zum Starten auf diesem Desktop"
         : Windows.Count <= 1 ? $"{AppName}\n{Title}"
         : $"{AppName} – {Windows.Count} Fenster\n" + string.Join("\n", Windows.Take(8).Select(w => "• " + w.DisplayTitle));
+
+    void NotifyExpandable()
+    {
+        OnPropertyChanged(nameof(HasMultipleWindows));
+        OnPropertyChanged(nameof(CanExpand));
+        OnPropertyChanged(nameof(BadgeText));
+        OnPropertyChanged(nameof(BadgeToolTip));
+    }
+
+    public void RefreshTabCount() => TabCount = WindowItems.Count == 1 ? WindowItems[0].Tabs.Count : 0;
+
     public void SyncWindowItems()
     {
         var listChanged = false;
         for (var i = 0; i < Windows.Count; i++)
         {
+            var w = Windows[i];
             if (i < WindowItems.Count)
             {
-                var a = WindowItems[i]; var b = Windows[i];
-                if (a.Handle == b.Handle && a.Title == b.Title && a.State == b.State) continue;
-                WindowItems[i] = b;
-                listChanged = true;
+                var item = WindowItems[i];
+                if (item.Handle == w.Handle) { if (item.Record.Title != w.Title || item.Record.State != w.State) listChanged = true; item.Update(w); }
+                else
+                {
+                    var existing = WindowItems.Skip(i + 1).FirstOrDefault(x => x.Handle == w.Handle);
+                    if (existing is not null) { WindowItems.Move(WindowItems.IndexOf(existing), i); existing.Update(w); }
+                    else WindowItems.Insert(i, new WindowItemViewModel(w));
+                    listChanged = true;
+                }
             }
-            else { WindowItems.Add(Windows[i]); listChanged = true; }
+            else { WindowItems.Add(new WindowItemViewModel(w)); listChanged = true; }
         }
         while (WindowItems.Count > Windows.Count) { WindowItems.RemoveAt(WindowItems.Count - 1); listChanged = true; }
+        var multi = WindowItems.Count > 1;
+        foreach (var item in WindowItems) item.ShowHeader = multi;
 
         var running = IsRunning;
         var minimized = IsMinimized;
@@ -72,7 +99,8 @@ public sealed class AppRowViewModel : ObservableObject
         if (minimized != _lastMinimized) { _lastMinimized = minimized; OnPropertyChanged(nameof(IsMinimized)); }
         if (handle != _lastPrimaryHandle) { _lastPrimaryHandle = handle; OnPropertyChanged(nameof(PrimaryHandle)); }
         if (listChanged) OnPropertyChanged(nameof(ToolTipText));
-        IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(WindowCount, IsWindowsExpanded);
+        RefreshTabCount();
+        IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(WindowCount, IsWindowsExpanded, TabCount);
     }
 }
 
@@ -140,6 +168,10 @@ public sealed class WidgetViewModel : ObservableObject
     private readonly IProcessManager _processes;
     private readonly IInstalledAppSource _apps;
     private readonly HashSet<string> _expandedAppRows = new();
+    private readonly HashSet<long> _expandedWindowTabs = new();
+    private readonly TabService _tabs;
+    private readonly TabAliasStore _aliases;
+    private bool _tabRefreshQueued;
 
     private bool _isExpanded = true;
     private bool _isHistoryOpen, _isStatusOpen;
@@ -148,8 +180,11 @@ public sealed class WidgetViewModel : ObservableObject
 
     public WidgetViewModel(AppController controller, DesktopManager desktops, ISettingsService settings, ISessionStore store,
         IProfileManager profiles, IDialogService dialogs, IconService icons, ILogService log,
-        IProcessManager processes, IInstalledAppSource apps, UpdateController updates)
+        IProcessManager processes, IInstalledAppSource apps, UpdateController updates, TabService tabs, TabAliasStore aliases)
     {
+        _tabs = tabs; _aliases = aliases;
+        _tabs.Changed += QueueTabRefresh;
+        _aliases.Changed += QueueTabRefresh;
         _controller = controller; _desktops = desktops; _settings = settings; _store = store; _profiles = profiles;
         _dialogs = dialogs; _icons = icons; _log = log;
         _processes = processes; _apps = apps; Updates = updates;
@@ -164,20 +199,30 @@ public sealed class WidgetViewModel : ObservableObject
         LoadProfiles();
         LoadHistory();
 
-        SwitchDesktopCommand = new AsyncRelayCommand(async p => { if (p is DesktopCardViewModel c) { await _desktops.SwitchAsync(c.Id); await _controller.RefreshAsync(); } });
+        SwitchDesktopCommand = new AsyncRelayCommand(async p => { if (p is DesktopCardViewModel c) await SwitchToCardAsync(c); });
         ToggleCardCommand = new RelayCommand(p => { if (p is DesktopCardViewModel c) { c.IsExpanded = !c.IsExpanded; RememberCollapsed(); } });
         AddDesktopCommand = new AsyncRelayCommand(AddDesktopAsync, () => _desktops.CanManage);
         AddAppCommand = new RelayCommand(p => AddApp(p as DesktopCardViewModel ?? ActiveCard));
         RestoreArrangementCommand = new AsyncRelayCommand(p => RestoreArrangementAsync(p as DesktopCardViewModel ?? ActiveCard));
         ToggleAppWindowsCommand = new RelayCommand(p => ToggleAppWindows(p as AppRowViewModel));
         RemovePinnedAppCommand = new RelayCommand(p => { if (p is AppRowViewModel a) RemovePinned(a); });
-        DuplicateDesktopCommand = new AsyncRelayCommand(DuplicateDesktopAsync, () => _desktops.CanManage && ActiveCard is not null);
+        DuplicateDesktopCommand = new AsyncRelayCommand(p => DuplicateDesktopAsync(p as DesktopCardViewModel ?? ActiveCard), _ => _desktops.CanManage && Cards.Count > 0);
         DeleteDesktopCommand = new AsyncRelayCommand(p => DeleteDesktopAsync(p as DesktopCardViewModel ?? ActiveCard), _ => _desktops.CanManage && Cards.Count > 1);
         BeginRenameCommand = new RelayCommand(p => { if (p is DesktopCardViewModel c && _desktops.CanManage) { c.EditName = c.Name.Length > 0 ? c.Name : c.DisplayName; c.IsEditing = true; } });
         CommitRenameCommand = new AsyncRelayCommand(async p => { if (p is DesktopCardViewModel c) await CommitRenameAsync(c); });
         CancelRenameCommand = new RelayCommand(p => { if (p is DesktopCardViewModel c) c.IsEditing = false; });
         ActivateAppCommand = new AsyncRelayCommand(ActivateOrLaunchAsync);
-        ActivateWindowCommand = new AsyncRelayCommand(async p => { if (p is WindowRecord w) await ActivateWindowQuietAsync(w.Handle, w.DesktopId); });
+        ActivateWindowCommand = new AsyncRelayCommand(async p =>
+        {
+            if (p is WindowItemViewModel w) await ActivateWindowQuietAsync(w.Handle, w.DesktopId);
+            else if (p is WindowRecord r) await ActivateWindowQuietAsync(r.Handle, r.DesktopId);
+        });
+        ActivateTabCommand = new AsyncRelayCommand(async p => { if (p is TabRowViewModel t) await ActivateTabAsync(t); });
+        ToggleWindowTabsCommand = new RelayCommand(p => ToggleWindowTabs(p as WindowItemViewModel));
+        BeginTabRenameCommand = new RelayCommand(p => { if (p is TabRowViewModel t) BeginTabRename(t); });
+        CommitTabRenameCommand = new RelayCommand(p => { if (p is TabRowViewModel t) CommitTabRename(t); });
+        CancelTabRenameCommand = new RelayCommand(p => { if (p is TabRowViewModel t) t.IsEditing = false; });
+        ResetTabAliasCommand = new RelayCommand(p => { if (p is TabRowViewModel t) ResetTabAlias(t); });
         MinimizeAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) foreach (var w in a.Windows) await _desktops.MinimizeAsync(w.Handle); });
         CloseAppCommand = new AsyncRelayCommand(CloseAppAsync);
         PinAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) { foreach (var w in a.Windows) await _desktops.PinWindowAsync(w.Handle, true); await _controller.RefreshAsync(); } }, _ => _desktops.CanManage);
@@ -265,6 +310,15 @@ public sealed class WidgetViewModel : ObservableObject
     public AsyncRelayCommand CommitRenameCommand { get; }
     public AsyncRelayCommand ActivateAppCommand { get; }
     public AsyncRelayCommand ActivateWindowCommand { get; }
+    public AsyncRelayCommand ActivateTabCommand { get; }
+    public RelayCommand ToggleWindowTabsCommand { get; }
+    public RelayCommand BeginTabRenameCommand { get; }
+    public RelayCommand CommitTabRenameCommand { get; }
+    public RelayCommand CancelTabRenameCommand { get; }
+    public RelayCommand ResetTabAliasCommand { get; }
+    /// <summary>Läuft gerade eine Tab-Umbenennung (Tastaturmodus des Widgets).</summary>
+    public bool TabReadingActive { get => _tabs.Active; set => _tabs.Active = value; }
+    public bool IsEditingAnyTab => AllTabs().Any(t => t.IsEditing);
     public AsyncRelayCommand MinimizeAppCommand { get; }
     public AsyncRelayCommand CloseAppCommand { get; }
     public AsyncRelayCommand PinAppCommand { get; }
@@ -279,6 +333,7 @@ public sealed class WidgetViewModel : ObservableObject
     {
         var state = _controller.Current;
         if (state is null) return;
+        _tabs.Observe(state.Windows);
         var collapsed = _settings.Current.Widget.CollapsedCards.ToHashSet();
         var desktops = state.Desktops.Count > 0 ? state.Desktops : new[] { new DesktopInfo { Id = Guid.Empty, Index = 0, Name = "Desktop 1" } };
         var byDesktop = desktops.ToDictionary(d => d.Id, _ => new List<WindowRecord>());
@@ -342,8 +397,9 @@ public sealed class WidgetViewModel : ObservableObject
             row.Title = string.IsNullOrWhiteSpace(first.Title) ? row.AppName : first.Title;
             row.WindowCount = g.Count;
             row.Icon ??= _icons.ForWindow(first.Handle, first.ExecutablePath, first.AppUserModelId);
-            ApplyExpandedState(row, card.Id);
             row.SyncWindowItems();
+            SyncTabs(row);
+            ApplyExpandedState(row, card.Id);
             result.Add(row);
         }
         foreach (var rule in PinnedApps.ForDesktop(_settings.Current.Rules, card.Index + 1))
@@ -403,12 +459,12 @@ public sealed class WidgetViewModel : ObservableObject
     private void ApplyExpandedState(AppRowViewModel row, Guid desktopId)
     {
         var keep = _expandedAppRows.Contains(AppExpandKey(desktopId, row.AppKey));
-        row.IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(row.WindowCount, keep);
+        row.IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(row.WindowCount, keep, row.TabCount);
     }
 
     public void ToggleAppWindows(AppRowViewModel? row)
     {
-        if (row is null || !row.HasMultipleWindows) return;
+        if (row is null || !row.CanExpand) return;
         row.IsWindowsExpanded = !row.IsWindowsExpanded;
         var key = AppExpandKey(row.DesktopId, row.AppKey);
         if (row.IsWindowsExpanded) _expandedAppRows.Add(key);
@@ -480,9 +536,44 @@ public sealed class WidgetViewModel : ObservableObject
         card ??= ActiveCard;
         if (card is null) return;
         var owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
-        var entry = DeskRecall.Views.AppPickerWindow.Pick(owner, _apps, _dialogs, _icons, card.DisplayName);
-        if (entry is null) return;
-        PinEntry(entry, card);
+        var picked = DeskRecall.Views.AppPickerWindow.Pick(owner, _apps, _dialogs, _icons, card.DisplayName);
+        if (picked is not { } p) return;
+        PinEntry(p.Entry, card);
+        if (p.Launch) _ = LaunchPickedAsync(p.Entry, card);
+    }
+
+    /// <summary>„Hinzufügen und starten“: auf den Desktop der Karte wechseln und das Programm dort starten.</summary>
+    private Task LaunchPickedAsync(InstalledAppEntry entry, DesktopCardViewModel card)
+    {
+        var uwp = entry.IsUwp && !string.IsNullOrWhiteSpace(entry.AppUserModelId);
+        var req = new LaunchRequest(
+            uwp ? "explorer.exe" : (entry.TargetPath ?? entry.ShortcutPath ?? entry.Name),
+            uwp ? CommandLine.Quote("shell:AppsFolder\\" + entry.AppUserModelId) : entry.Arguments,
+            uwp ? null : (entry.WorkingDirectory ?? (entry.TargetPath is null ? null : WinPath.GetDirectoryName(entry.TargetPath))),
+            entry.AppUserModelId,
+            false,
+            false,
+            entry.Name);
+        return LaunchOnDesktopAsync(card.Id, req);
+    }
+
+    private async Task LaunchOnDesktopAsync(Guid desktopId, LaunchRequest req)
+    {
+        try
+        {
+            using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            {
+                if (_desktops.CanManage && desktopId != Guid.Empty) { MarkActive(desktopId); await _desktops.SwitchAsync(desktopId, Stopwatch.GetTimestamp()); }
+                var result = _processes.Launch(req);
+                if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
+                    _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("Apps", "Programm konnte nicht gestartet werden", ex);
+            _dialogs.Info("Start fehlgeschlagen", ex.Message);
+        }
     }
 
     public InstalledAppEntry? ResolveDropped(string path) => _apps.ResolveShortcut(path) ?? InstalledAppCatalog.FromDroppedPath(path);
@@ -494,10 +585,106 @@ public sealed class WidgetViewModel : ObservableObject
         else await ActivateWindowQuietAsync(handle, null);
     }
 
-    private async Task ActivateWindowQuietAsync(long handle, Guid? desktopId)
+    private async Task ActivateWindowQuietAsync(long handle, Guid? desktopId, Func<Task>? beforeFocus = null)
     {
+        var click = Stopwatch.GetTimestamp();
+        if (desktopId is Guid d && d != Guid.Empty) MarkActive(d);
         using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
-            await _desktops.BringToFrontAsync(handle, desktopId);
+            await _desktops.BringToFrontAsync(handle, desktopId, click, beforeFocus);
+    }
+
+    /// <summary>Desktop-Kopf geklickt: Karte sofort als aktiv zeigen, im Hintergrund wechseln, währenddessen kein Neuaufbau.</summary>
+    public async Task SwitchToCardAsync(DesktopCardViewModel card)
+    {
+        var click = Stopwatch.GetTimestamp();
+        if (card.IsActive) return;
+        MarkActive(card.Id);
+        using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            await _desktops.SwitchAsync(card.Id, click);
+    }
+
+    /// <summary>Optimistisch: nur IsActive umschalten (billig), der eigentliche Abgleich folgt nach dem Wechsel.</summary>
+    private void MarkActive(Guid desktopId)
+    {
+        if (Cards.All(c => c.Id != desktopId)) return;
+        foreach (var c in Cards) c.IsActive = c.Id == desktopId;
+        OnPropertyChanged(nameof(ActiveCard));
+    }
+
+    // ------------------------------------------------------------ Browser-Tabs
+
+    private IEnumerable<TabRowViewModel> AllTabs() =>
+        Cards.SelectMany(c => c.Apps).SelectMany(a => a.WindowItems).SelectMany(w => w.Tabs);
+
+    private void SyncTabs(AppRowViewModel row)
+    {
+        foreach (var item in row.WindowItems)
+        {
+            item.Family = TabService.FamilyOf(item.Record);
+            if (item.Family == BrowserFamily.None) { if (item.Tabs.Count > 0) item.SyncTabs(Array.Empty<BrowserTab>(), "", _ => null); continue; }
+            var proc = item.Record.ProcessName ?? "";
+            item.SyncTabs(_tabs.Get(item.Handle), proc, title => _aliases.Find(proc, title));
+            item.IsTabsExpanded = _expandedWindowTabs.Contains(item.Handle);
+        }
+        row.RefreshTabCount();
+    }
+
+    private void QueueTabRefresh()
+    {
+        if (_tabRefreshQueued) return;
+        _tabRefreshQueued = true;
+        Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, RefreshTabs);
+    }
+
+    private void RefreshTabs()
+    {
+        _tabRefreshQueued = false;
+        foreach (var card in Cards)
+            foreach (var row in card.Apps)
+            {
+                SyncTabs(row);
+                row.IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(row.WindowCount, _expandedAppRows.Contains(AppExpandKey(card.Id, row.AppKey)), row.TabCount);
+            }
+    }
+
+    public void ToggleWindowTabs(WindowItemViewModel? item)
+    {
+        if (item is null || !item.HasTabs) return;
+        item.IsTabsExpanded = !item.IsTabsExpanded;
+        if (item.IsTabsExpanded) _expandedWindowTabs.Add(item.Handle);
+        else _expandedWindowTabs.Remove(item.Handle);
+    }
+
+    /// <summary>Tab-Klick: Desktop wechseln, Tab per UI Automation wählen, Fenster in den Vordergrund.</summary>
+    public async Task ActivateTabAsync(TabRowViewModel tab)
+    {
+        var w = tab.Window;
+        var selected = false;
+        await ActivateWindowQuietAsync(w.Handle, w.DesktopId, async () => selected = await _tabs.SelectAsync(w.Handle, w.Family, tab.Tab));
+        // manche Browser wählen Tabs erst, wenn ihr Fenster im Vordergrund ist
+        if (!selected) await _tabs.SelectAsync(w.Handle, w.Family, tab.Tab);
+    }
+
+    public void BeginTabRename(TabRowViewModel tab)
+    {
+        foreach (var t in AllTabs()) if (t.IsEditing && t != tab) CommitTabRename(t);
+        tab.EditName = tab.DisplayTitle;
+        tab.IsEditing = true;
+    }
+
+    public void CommitTabRename(TabRowViewModel tab)
+    {
+        if (!tab.IsEditing) return;
+        tab.IsEditing = false;
+        _aliases.Set(tab.ProcessName, tab.Tab.Title, tab.EditName);
+        tab.SetAlias(_aliases.Find(tab.ProcessName, tab.Tab.Title));
+    }
+
+    public void ResetTabAlias(TabRowViewModel tab)
+    {
+        tab.IsEditing = false;
+        _aliases.Reset(tab.ProcessName, tab.Tab.Title);
+        tab.SetAlias(null);
     }
 
     public void PinEntry(InstalledAppEntry entry, DesktopCardViewModel card)
@@ -527,31 +714,14 @@ public sealed class WidgetViewModel : ObservableObject
             return;
         }
         if (!a.IsPinnedEntry) return;
-        try
-        {
-            using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
-            {
-                if (_desktops.CanManage) await _desktops.SwitchAsync(a.DesktopId);
-                var req = new LaunchRequest(
-                    a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
-                    a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
-                    a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
-                    a.AppUserModelId,
-                    false,
-                    false,
-                    a.AppName);
-                var result = _processes.Launch(req);
-                if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
-                    _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
-                else
-                    await Task.Delay(400);
-            }
-        }
-        catch (Exception ex)
-        {
-            _log.Warn("Apps", "Angeheftetes Programm konnte nicht gestartet werden", ex);
-            _dialogs.Info("Start fehlgeschlagen", ex.Message);
-        }
+        await LaunchOnDesktopAsync(a.DesktopId, new LaunchRequest(
+            a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
+            a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
+            a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
+            a.AppUserModelId,
+            false,
+            false,
+            a.AppName));
     }
 
     private void RememberCollapsed() =>
@@ -568,9 +738,8 @@ public sealed class WidgetViewModel : ObservableObject
     }
 
     /// <summary>Legt direkt hinter dem aktiven Desktop eine Kopie an (Name und Explorer-Ordner). Programme selbst lassen sich nicht klonen.</summary>
-    private async Task DuplicateDesktopAsync()
+    private async Task DuplicateDesktopAsync(DesktopCardViewModel? src)
     {
-        var src = ActiveCard;
         if (src is null) return;
         var d = await _desktops.CreateAsync(src.DisplayName + " (Kopie)");
         if (d is null) return;

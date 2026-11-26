@@ -18,11 +18,20 @@ public class WindowActivationTests
     }
 
     [Fact]
-    public void ResolveDesktop_prefers_the_window_desktop_from_com()
+    public void ResolveDesktop_uses_the_known_desktop_without_a_com_call()
     {
         var (vd, _, _, d1, d2) = Setup();
         vd.WindowDesktop[42] = d2;
-        Assert.Equal(d2, WindowActivation.ResolveDesktop(vd, 42, d1));
+        Assert.Equal(d1, WindowActivation.ResolveDesktop(vd, 42, d1));
+    }
+
+    [Fact]
+    public void ResolveDesktop_asks_com_only_when_the_desktop_is_unknown()
+    {
+        var (vd, _, _, _, d2) = Setup();
+        vd.WindowDesktop[42] = d2;
+        Assert.Equal(d2, WindowActivation.ResolveDesktop(vd, 42, null));
+        Assert.Equal(d2, WindowActivation.ResolveDesktop(vd, 42, Guid.Empty));
     }
 
     [Fact]
@@ -31,6 +40,7 @@ public class WindowActivationTests
         var (vd, _, _, _, d2) = Setup();
         Assert.Equal(d2, WindowActivation.ResolveDesktop(vd, 42, d2));
         Assert.Equal(Guid.Empty, WindowActivation.ResolveDesktop(vd, 0, null));
+        Assert.Equal(Guid.Empty, WindowActivation.ResolveDesktop(vd, 99, null));
     }
 
     [Fact]

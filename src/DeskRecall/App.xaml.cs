@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using DeskRecall.Core.Abstractions;
 using DeskRecall.Core.Apps;
+using DeskRecall.Core.Browsers;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
@@ -149,6 +150,9 @@ public partial class App : Application
         sc.AddSingleton<IconService>();
         sc.AddSingleton<TrayService>();
         sc.AddSingleton<DesktopManager>();
+        sc.AddSingleton(sp => new TabAliasStore(Path.Combine(paths.Root, "tab-names.json")));
+        sc.AddSingleton<ITabReader, UiaTabReader>();
+        sc.AddSingleton<TabService>();
         sc.AddSingleton<AppController>();
         sc.AddSingleton<WidgetViewModel>();
         sc.AddSingleton<WidgetWindow>();

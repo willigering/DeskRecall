@@ -139,13 +139,13 @@ public sealed class WindowsVirtualDesktopService : IVirtualDesktopService, IDisp
 
     private static bool IsDisconnected(Exception ex) => ex is InvalidComObjectException || (uint)ex.HResult is 0x80010108 or 0x800706BA or 0x800706BF or 0x80010012 or 0x8001010E;
 
-    private T Call<T>(string what, T fallback, Func<IVdBackend, T> func)
+    private T Call<T>(string what, T fallback, Func<IVdBackend, T> func, bool urgent = false)
     {
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var b = _backend;
             if (b is null) return fallback;
-            try { return _com.Invoke(() => func(b)); }
+            try { return _com.Invoke(() => func(b), urgent: urgent); }
             catch (Exception ex) when (attempt == 0 && IsDisconnected(ex)) { Reinitialize(); }
             catch (Exception ex)
             {
@@ -171,7 +171,7 @@ public sealed class WindowsVirtualDesktopService : IVirtualDesktopService, IDisp
     {
         if (_backend is not null)
         {
-            var id = Call("Aktiven Desktop lesen", Guid.Empty, b => b.GetCurrentId());
+            var id = Call("Aktiven Desktop lesen", Guid.Empty, b => b.GetCurrentId(), urgent: true);
             if (id != Guid.Empty) return id;
         }
         return VirtualDesktopRegistry.ReadCurrent();
@@ -290,9 +290,10 @@ public sealed class WindowsVirtualDesktopService : IVirtualDesktopService, IDisp
             }
         }
         b.Switch(desktopId);
-        if (host != IntPtr.Zero) NativeMethods.ShowWindow(host, NativeMethods.SW_MINIMIZE);
+        // asynchron: nicht auf den Explorer warten, der gerade die Wechselanimation zeichnet
+        if (host != IntPtr.Zero) NativeMethods.ShowWindowAsync(host, NativeMethods.SW_MINIMIZE);
         return true;
-    });
+    }, urgent: true);
 
     public DesktopInfo? CreateDesktop(string? name = null)
     {

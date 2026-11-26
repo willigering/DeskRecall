@@ -34,8 +34,6 @@ public partial class WidgetWindow : Window
     private Point _dragStart;
     private AppRowViewModel? _dragRow;
     private bool _suppressRenameClicks;
-    private DispatcherTimer? _pendingSwitch;
-    private DesktopCardViewModel? _pendingSwitchCard;
     private int _appliedOpacity = -1;
     private bool _appliedAcrylicWanted;
     private uint _appliedTint;
@@ -59,10 +57,15 @@ public partial class WidgetWindow : Window
             if (e.PropertyName == nameof(WidgetViewModel.IsStatusOpen)) StatusChevron.Text = _vm.IsStatusOpen ? "\uE70E" : "\uE70D";
         };
         IsVisibleChanged += (_, _) => { _controller.UiActive = IsVisible && !_hiddenForFullscreen; if (IsVisible) _controller.MarkDirty(); };
+        // Browser-Tabs nur lesen, solange die Liste wirklich zu sehen ist
+        IsVisibleChanged += (_, _) => UpdateTabReading();
+        ExpandedPanel.IsVisibleChanged += (_, _) => UpdateTabReading();
         PreviewMouseLeftButtonDown += Root_PreviewMouseLeftButtonDown;
     }
 
     public bool IsWidgetVisible => IsVisible;
+
+    private void UpdateTabReading() => _vm.TabReadingActive = IsVisible && ExpandedPanel.IsVisible && !_hiddenForFullscreen;
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -354,10 +357,10 @@ public partial class WidgetWindow : Window
     private void Root_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_suppressRenameClicks) return;
-        if (!_vm.Cards.Any(c => c.IsEditing)) return;
-        if (e.OriginalSource is DependencyObject d && FindParent<TextBox>(d, tb => tb.Name == "RenameBox") is not null) return;
+        if (e.OriginalSource is DependencyObject d && FindParent<TextBox>(d, tb => tb.Name is "RenameBox" or "TabRenameBox") is not null) return;
         foreach (var c in _vm.Cards.Where(c => c.IsEditing).ToList())
             _vm.CommitRenameCommand.Execute(c);
+        CommitTabEdits();
     }
 
     // ------------------------------------------------------------ Karten
@@ -378,15 +381,14 @@ public partial class WidgetWindow : Window
         if (action == DesktopCardInput.HeaderAction.None) return;
         if (action == DesktopCardInput.HeaderAction.CommitRename)
         {
-            CancelPendingSwitch();
             _vm.CommitRenameCommand.Execute(card);
             e.Handled = true;
             return;
         }
         if (action == DesktopCardInput.HeaderAction.Switch)
         {
-            if (onName) ScheduleSwitch(card);
-            else { CancelPendingSwitch(); _vm.SwitchDesktopCommand.Execute(card); }
+            // Sofort wechseln (keine Doppelklick-Wartezeit mehr); auf der aktiven Karte bleibt der Name-Klick frei für den Doppelklick.
+            if (!onName || DesktopCardInput.NameClickSwitchesImmediately(card.IsActive)) _vm.SwitchDesktopCommand.Execute(card);
             e.Handled = true;
         }
     }
@@ -395,12 +397,16 @@ public partial class WidgetWindow : Window
     {
         base.OnPreviewMouseDoubleClick(e);
         if (e.OriginalSource is not DependencyObject d) return;
+        if (FindParent<Border>(d, b => b.Name == "TabRow") is { DataContext: TabRowViewModel tab })
+        {
+            if (!tab.IsEditing && FindParent<TextBox>(d) is null) { BeginTabRename(tab); e.Handled = true; }
+            return;
+        }
         if (FindParent<Grid>(d, g => g.Name == "CardHeader") is not { DataContext: DesktopCardViewModel card }) return;
         var onButton = FindParent<Button>(d) is not null;
         var onBox = FindParent<TextBox>(d) is not null;
         var action = DesktopCardInput.OnNameClick(card.IsEditing, isDoubleClick: true, onBox, onButton);
         if (action != DesktopCardInput.HeaderAction.BeginRename) return;
-        CancelPendingSwitch();
         BeginRenameLikeContextMenu(card);
         e.Handled = true;
     }
@@ -417,12 +423,24 @@ public partial class WidgetWindow : Window
         }, DispatcherPriority.Input);
     }
 
-    private void FocusRenameBox()
+    /// <summary>Tab umbenennen: gleicher Ablauf wie bei Desktops (Tastaturmodus, Text komplett ausgewählt).</summary>
+    private void BeginTabRename(TabRowViewModel tab)
+    {
+        _suppressRenameClicks = true;
+        _vm.BeginTabRenameCommand.Execute(tab);
+        Dispatcher.BeginInvoke(() =>
+        {
+            try { FocusRenameBox("TabRenameBox"); }
+            finally { _suppressRenameClicks = false; }
+        }, DispatcherPriority.Input);
+    }
+
+    private void FocusRenameBox(string name = "RenameBox")
     {
         EnterKeyboardMode();
         TextBox? box = null;
         foreach (var tb in FindRenameBoxes(this))
-            if (tb.IsVisible && tb.Name == "RenameBox") { box = tb; break; }
+            if (tb.IsVisible && tb.Name == name) { box = tb; break; }
         if (box is null) return;
         box.Focusable = true;
         box.Focus();
@@ -441,34 +459,6 @@ public partial class WidgetWindow : Window
         }
     }
 
-    private void ScheduleSwitch(DesktopCardViewModel card)
-    {
-        CancelPendingSwitch();
-        _pendingSwitchCard = card;
-        var delay = Math.Max(200, (int)GetDoubleClickTime());
-        _pendingSwitch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
-        _pendingSwitch.Tick += OnPendingSwitchTick;
-        _pendingSwitch.Start();
-    }
-
-    private void OnPendingSwitchTick(object? sender, EventArgs e)
-    {
-        var card = _pendingSwitchCard;
-        CancelPendingSwitch();
-        if (card is not null && !card.IsEditing) _vm.SwitchDesktopCommand.Execute(card);
-    }
-
-    private void CancelPendingSwitch()
-    {
-        if (_pendingSwitch is not null)
-        {
-            _pendingSwitch.Tick -= OnPendingSwitchTick;
-            _pendingSwitch.Stop();
-            _pendingSwitch = null;
-        }
-        _pendingSwitchCard = null;
-    }
-
     private void StripChip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (Ctx<DesktopCardViewModel>(sender) is { } card) _vm.SwitchDesktopCommand.Execute(card);
@@ -477,7 +467,7 @@ public partial class WidgetWindow : Window
     private void Card_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not DesktopCardViewModel card || fe.ContextMenu is not { } menu) return;
-        if (e.OriginalSource is DependencyObject d && FindParent<Border>(d, b => b.Name == "Row") is not null) { e.Handled = true; return; } // Zeilen haben eigenes Menü
+        if (e.OriginalSource is DependencyObject d && FindParent<Border>(d, b => b.Name is "Row" or "SubRow" or "TabRow") is not null) { e.Handled = true; return; } // Zeilen haben eigenes Menü
         menu.Items.Clear();
         menu.Items.Add(Item("Zu diesem Desktop wechseln", "\uE8A7", () => _vm.SwitchDesktopCommand.Execute(card)));
         menu.Items.Add(Item("Umbenennen", "\uE70F", () => _vm.BeginRenameCommand.Execute(card), _vm.CanManageDesktops));
@@ -487,6 +477,7 @@ public partial class WidgetWindow : Window
         menu.Items.Add(Item("Fensteranordnung wiederherstellen", "\uE8A5", () => _vm.RestoreArrangementCommand.Execute(card), card.HasArrangement));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Neuer Desktop", "\uE710", () => _vm.AddDesktopCommand.Execute(null), _vm.CanManageDesktops));
+        menu.Items.Add(Item("Desktop duplizieren", "\uE8C8", () => _vm.DuplicateDesktopCommand.Execute(card), _vm.CanManageDesktops));
         menu.Items.Add(Item("Desktop schließen …", "\uE74D", () => _vm.DeleteDesktopCommand.Execute(card), _vm.CanManageDesktops && _vm.Cards.Count > 1));
         HookMenu(menu);
     }
@@ -522,6 +513,27 @@ public partial class WidgetWindow : Window
             menu.Items.Add(Item("Von diesem Desktop entfernen", "\uE738", () => _vm.RemovePinnedAppCommand.Execute(row)));
         if (row.IsRunning)
             menu.Items.Add(Item(row.Windows.Count > 1 ? "Alle Fenster schließen …" : "Schließen …", "\uE711", () => _vm.CloseAppCommand.Execute(row)));
+        HookMenu(menu);
+    }
+
+    private void SubRow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.ContextMenu is not { } menu) { e.Handled = true; return; }
+        menu.Items.Clear();
+        if (fe.DataContext is TabRowViewModel tab)
+        {
+            menu.Items.Add(Item("Tab anzeigen", "\uE8A7", () => _vm.ActivateTabCommand.Execute(tab)));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Item("Umbenennen", "\uE70F", () => BeginTabRename(tab)));
+            menu.Items.Add(Item("Ursprünglichen Namen wiederherstellen", "\uE7A7", () => _vm.ResetTabAliasCommand.Execute(tab), tab.HasAlias));
+        }
+        else if (fe.DataContext is WindowItemViewModel win)
+        {
+            menu.Items.Add(Item("In den Vordergrund holen", "\uE8A7", () => _vm.ActivateWindowCommand.Execute(win)));
+            if (win.HasTabs)
+                menu.Items.Add(Item(win.IsTabsExpanded ? "Tabs einklappen" : "Tabs anzeigen", win.IsTabsExpanded ? "\uE70E" : "\uE70D", () => _vm.ToggleWindowTabsCommand.Execute(win)));
+        }
+        else { e.Handled = true; return; }
         HookMenu(menu);
     }
 
@@ -576,7 +588,7 @@ public partial class WidgetWindow : Window
         var row = _pressedRow;
         _pressedRow = null;
         var onToggle = e.OriginalSource is DependencyObject d && IsToggleChrome(d);
-        switch (AppRowInput.OnAppRowClick(row.WindowCount, onToggleChrome: onToggle))
+        switch (AppRowInput.OnAppRowClick(row.WindowCount, onToggleChrome: onToggle, tabCount: row.TabCount))
         {
             case AppRowInput.RowAction.ToggleWindows:
                 _vm.ToggleAppWindows(row);
@@ -591,9 +603,54 @@ public partial class WidgetWindow : Window
     private void WindowSubRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _pressedRow = null;
-        if (Ctx<WindowRecord>(sender) is { } win)
-            _vm.ActivateWindowCommand.Execute(win);
         e.Handled = true;
+        if (Ctx<WindowItemViewModel>(sender) is not { } win) return;
+        var onToggle = e.OriginalSource is DependencyObject d && IsToggleChrome(d);
+        if (AppRowInput.OnWindowRowClick(win.Tabs.Count, onToggle) == AppRowInput.WindowRowAction.ToggleTabs) _vm.ToggleWindowTabsCommand.Execute(win);
+        else _vm.ActivateWindowCommand.Execute(win);
+    }
+
+    private void TabRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _pressedRow = null;
+        e.Handled = true;
+        if (_suppressRenameClicks) return;
+        if (Ctx<TabRowViewModel>(sender) is not { } tab) return;
+        if (tab.IsEditing || (e.OriginalSource is DependencyObject d && FindParent<TextBox>(d) is not null)) return;
+        if (e.ClickCount > 1) return; // Doppelklick = umbenennen
+        _vm.ActivateTabCommand.Execute(tab);
+    }
+
+    private void TabRenameBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+        if (tb.IsVisible)
+            Dispatcher.BeginInvoke(() => { if (tb.IsVisible) FocusRenameBox("TabRenameBox"); }, DispatcherPriority.Input);
+        else LeaveKeyboardModeIfIdle();
+    }
+
+    private void TabRenameBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (Ctx<TabRowViewModel>(sender) is not { } tab) return;
+        if (e.Key == Key.Enter) { _vm.CommitTabRenameCommand.Execute(tab); e.Handled = true; }
+        else if (e.Key == Key.Escape) { _vm.CancelTabRenameCommand.Execute(tab); e.Handled = true; }
+    }
+
+    private void TabRenameBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (Ctx<TabRowViewModel>(sender) is { IsEditing: true } tab) _vm.CommitTabRenameCommand.Execute(tab);
+    }
+
+    private void CommitTabEdits()
+    {
+        if (!_vm.IsEditingAnyTab) return;
+        foreach (var t in _vm.Cards.SelectMany(c => c.Apps).SelectMany(a => a.WindowItems).SelectMany(w => w.Tabs).Where(t => t.IsEditing).ToList())
+            _vm.CommitTabRenameCommand.Execute(t);
+    }
+
+    private void LeaveKeyboardModeIfIdle()
+    {
+        if (!_vm.Cards.Any(c => c.IsEditing) && !_vm.IsEditingAnyTab) LeaveKeyboardMode();
     }
 
     private static AppRowViewModel? Dragged(DragEventArgs e) => e.Data.GetDataPresent(typeof(AppRowViewModel)) ? e.Data.GetData(typeof(AppRowViewModel)) as AppRowViewModel : null;
@@ -655,7 +712,7 @@ public partial class WidgetWindow : Window
         if (sender is not TextBox tb) return;
         if (tb.IsVisible)
             Dispatcher.BeginInvoke(() => { if (tb.IsVisible) FocusRenameBox(); }, DispatcherPriority.Input);
-        else if (!_vm.Cards.Any(c => c.IsEditing)) LeaveKeyboardMode();
+        else LeaveKeyboardModeIfIdle();
     }
 
     private void RenameBox_KeyDown(object sender, KeyEventArgs e)
@@ -674,6 +731,7 @@ public partial class WidgetWindow : Window
     {
         base.OnDeactivated(e);
         foreach (var c in _vm.Cards.Where(c => c.IsEditing).ToList()) _vm.CommitRenameCommand.Execute(c);
+        CommitTabEdits();
     }
 
     private IntPtr _previousForeground;
@@ -702,7 +760,7 @@ public partial class WidgetWindow : Window
         while (d is not null)
         {
             if (d is FrameworkElement fe && AppRowInput.IsToggleChromeName(fe.Name)) return true;
-            if (d is FrameworkElement { Name: "Row" }) return false;
+            if (d is FrameworkElement { Name: "Row" or "SubRow" }) return false;
             d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
         }
         return false;

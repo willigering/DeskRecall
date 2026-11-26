@@ -26,6 +26,8 @@ public partial class AppPickerWindow : Window
     readonly ObservableCollection<AppPickItem> _visible = new();
 
     public InstalledAppEntry? Selected { get; private set; }
+    /// <summary>„Hinzufügen und starten“ gewählt.</summary>
+    public bool LaunchAfterAdd { get; private set; }
 
     public AppPickerWindow(IInstalledAppSource source, IDialogService dialogs, IconService icons, string desktopName)
     {
@@ -97,7 +99,7 @@ public partial class AppPickerWindow : Window
     }
 
     void AppList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        => OkButton.IsEnabled = AppList.SelectedItem is AppPickItem;
+        => OkButton.IsEnabled = OkLaunchButton.IsEnabled = AppList.SelectedItem is AppPickItem;
 
     void AppList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
@@ -120,6 +122,7 @@ public partial class AppPickerWindow : Window
     }
 
     void Ok_Click(object sender, RoutedEventArgs e) => Accept();
+    void OkLaunch_Click(object sender, RoutedEventArgs e) { LaunchAfterAdd = true; Accept(); }
     void Cancel_Click(object sender, RoutedEventArgs e) { DialogResult = false; Close(); }
 
     void Accept()
@@ -132,10 +135,10 @@ public partial class AppPickerWindow : Window
 
     void Title_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.LeftButton == MouseButtonState.Pressed) DragMove(); }
 
-    public static InstalledAppEntry? Pick(Window? owner, IInstalledAppSource source, IDialogService dialogs, IconService icons, string desktopName)
+    public static (InstalledAppEntry Entry, bool Launch)? Pick(Window? owner, IInstalledAppSource source, IDialogService dialogs, IconService icons, string desktopName)
     {
         var w = new AppPickerWindow(source, dialogs, icons, desktopName);
         if (owner is not null) w.Owner = owner;
-        return w.ShowDialog() == true ? w.Selected : null;
+        return w.ShowDialog() == true && w.Selected is { } e ? (e, w.LaunchAfterAdd) : null;
     }
 }
