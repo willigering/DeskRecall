@@ -86,6 +86,8 @@ public interface IClock
 {
     DateTimeOffset Now { get; }
     Task Delay(TimeSpan delay, CancellationToken ct);
+    /// <summary>Plant einen einmaligen Aufruf nach <paramref name="delay"/>. Das zurückgegebene Objekt sagt den Termin ab.</summary>
+    IDisposable Schedule(TimeSpan delay, Action action);
 }
 
 public sealed class SystemClock : IClock
@@ -93,4 +95,9 @@ public sealed class SystemClock : IClock
     public static readonly SystemClock Instance = new();
     public DateTimeOffset Now => DateTimeOffset.Now;
     public Task Delay(TimeSpan delay, CancellationToken ct) => Task.Delay(delay, ct);
+    public IDisposable Schedule(TimeSpan delay, Action action)
+    {
+        var due = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+        return new Timer(_ => { try { action(); } catch { } }, null, due, Timeout.InfiniteTimeSpan);
+    }
 }

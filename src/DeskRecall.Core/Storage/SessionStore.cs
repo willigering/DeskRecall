@@ -113,8 +113,10 @@ public sealed class SessionStore : ISessionStore
                 var json = Json.Serialize(snapshot);
                 AtomicFile.WriteAllText(_paths.LastSessionFile, json);
 
-                var name = $"{snapshot.CreatedAt.ToLocalTime():yyyyMMdd-HHmmss-fff}_{snapshot.Kind.ToString().ToLowerInvariant()}.json";
-                var histPath = Path.GetFullPath(Path.Combine(_paths.History, name));
+                var stem = $"{snapshot.CreatedAt.ToLocalTime():yyyyMMdd-HHmmss-fff}_{snapshot.Kind.ToString().ToLowerInvariant()}";
+                var histPath = Path.GetFullPath(Path.Combine(_paths.History, stem + ".json"));
+                for (var n = 2; File.Exists(histPath); n++)
+                    histPath = Path.GetFullPath(Path.Combine(_paths.History, $"{stem}-{n}.json"));
                 AtomicFile.WriteAllText(histPath, json, keepBackup: false);
                 _summaryCache[histPath] = Summarize(histPath, snapshot);
 
@@ -214,12 +216,17 @@ public static class HistoryRetention
             .ToList();
     }
 
+    /// <summary>
+    /// Relative deutsche Zeitangabe. Tag und Uhrzeit gelten in der Zeitzone von <paramref name="now"/>
+    /// (in der App <c>DateTimeOffset.Now</c>, also die lokale Zone des Rechners), nicht in der Systemzone
+    /// unabhängig von <paramref name="now"/>. Wochentage und Datumsformat sind immer de-DE.
+    /// </summary>
     public static string FormatRelative(DateTimeOffset time, DateTimeOffset now)
     {
         var de = CultureInfo.GetCultureInfo("de-DE");
-        var local = time.ToLocalTime();
+        var local = time.ToOffset(now.Offset);
         var day = local.Date;
-        var today = now.ToLocalTime().Date;
+        var today = now.Date;
         var clock = local.ToString("HH:mm", de) + " Uhr";
         if (day == today) return "Heute, " + clock;
         if (day == today.AddDays(-1)) return "Gestern, " + clock;

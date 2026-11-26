@@ -55,7 +55,7 @@ Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Al
 | Fensteranordnung | Aufgeklappte Karten zeigen eine Miniatur der gespeicherten/aktuellen Fensterrechtecke (Monitore, Symbole). Klick holt das Fenster nach vorn; optional „Fensteranordnung wiederherstellen“ aus der letzten Sicherung. |
 | Aktualisierung | Nach dem Start und etwa alle 6 Stunden Prüfung der öffentlichen GitHub-Releases (abstellbar). Hinweis im Widget und im Infobereich, Download der passenden Variante (portabel oder framework-abhängig), Prüfung von Größe und – sofern veröffentlicht – SHA-256, Austausch der EXE ohne Administratorrechte, Neustart, Benutzerdaten bleiben unberührt. Die Feed-URL ist unter Einstellungen änderbar. |
 | Erscheinungsbild | Transparenz wirkt live auf Acryl/Tönung (Text bleibt lesbar). Breite in drei Stufen (Schmal / Normal / Breit). Größenwechsel wird einmalig weich animiert, ohne den Acryl-Effekt bei jedem Tick neu aufzubauen. |
-| Datenschutz | Alles lokal, keine Telemetrie, keine Registrierung, keine Administratorrechte. Die optionale Update-Prüfung fragt nur die (konfigurierbare) GitHub-Release-API ab; es werden keine Nutzungsdaten gesendet. |
+| Datenschutz | Alles lokal, keine Telemetrie, keine Registrierung, keine Administratorrechte. Die optionale Update-Prüfung ist der einzige Netzwerkzugriff (siehe *Rechtliches & Datenschutz*). |
 
 ## Unterstützte Windows-Versionen
 
@@ -94,6 +94,21 @@ sessions\history\*.json      Verlauf
 profiles\*.profile.json      Profile
 logs\deskrecall-JJJJMMTT.log Protokoll (14 Tage)
 ```
+
+
+## Rechtliches & Datenschutz
+
+DeskRecall ist kostenlos und wird **ohne Gewähr** bereitgestellt. Eine Haftung besteht nur bei Vorsatz und grober Fahrlässigkeit.
+
+Alle Sitzungs- und Einstellungsdaten bleiben **lokal** auf diesem Rechner. Es gibt keine Telemetrie, kein Benutzerkonto und keine Registrierung.
+
+Die **einzige Netzwerkverbindung** ist die optionale Update-Prüfung gegen `api.github.com` (Standard: die öffentlichen GitHub-Releases dieses Projekts). Dabei wird typischerweise Ihre IP-Adresse an GitHub übermittelt; es werden keine Sitzungsdaten oder Nutzungsstatistiken gesendet. Die Prüfung lässt sich unter *Einstellungen → Allgemein* abschalten.
+
+Mitgelieferter Code Dritter steht unter der MIT-Lizenz; Einzelheiten stehen in `THIRD-PARTY-NOTICES.md`. Die Lizenzdateien liegen dem Release bei und sind in der App unter *Einstellungen → Info* erreichbar.
+
+Windows ist eine Marke der Microsoft Corporation.
+
+Die EXE ist nicht signiert. Windows SmartScreen kann beim ersten Start warnen; gegebenenfalls „Weitere Informationen → Trotzdem ausführen“ wählen.
 
 ## Bauen
 

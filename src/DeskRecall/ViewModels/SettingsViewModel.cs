@@ -59,6 +59,7 @@ public sealed class SettingsViewModel : ObservableObject
             new NavItem { Key = "monitors", Title = "Monitore", Glyph = "\uE7F4" },
             new NavItem { Key = "exclusions", Title = "Ausnahmen", Glyph = "\uE71C" },
             new NavItem { Key = "diagnostics", Title = "Diagnose", Glyph = "\uE9D9" },
+            new NavItem { Key = "info", Title = "Info", Glyph = "\uE946" },
         };
         _selectedPage = Pages[0];
         foreach (var p in S.Exclusions.ProcessNames) ExcludedProcesses.Add(p);
@@ -106,7 +107,31 @@ public sealed class SettingsViewModel : ObservableObject
     public HistoryViewModel History { get; }
     public DiagnosticsViewModel Diagnostics { get; }
 
-    public string VersionText => $"Version {AppInfo.Version} (Build {AppInfo.BuildNumber}) · © 2026 Willi Gering, Gering Digital";
+    public string VersionText => $"Version {AppInfo.Version} (Build {AppInfo.BuildNumber})";
+    public string CopyrightText => "© 2026 Willi Gering, Gering Digital";
+    public RelayCommand OpenLicenseCommand { get; } = new(() => OpenAccompanyingFile("LICENSE"));
+    public RelayCommand OpenNoticesCommand { get; } = new(() => OpenAccompanyingFile("THIRD-PARTY-NOTICES.md"));
+
+    static void OpenAccompanyingFile(string name)
+    {
+        var path = FindAccompanyingFile(name);
+        if (path is null) return;
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); } catch { }
+    }
+
+    internal static string? FindAccompanyingFile(string name)
+    {
+        var start = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
+        for (var dir = start; dir is not null; dir = Path.GetDirectoryName(dir))
+        {
+            var path = Path.Combine(dir, name);
+            if (File.Exists(path)) return path;
+            // in typischen Build-Ordnern nicht endlos über das Repo hinauslaufen
+            if (File.Exists(Path.Combine(dir, "DeskRecall.sln"))) break;
+        }
+        var basePath = Path.Combine(AppContext.BaseDirectory, name);
+        return File.Exists(basePath) ? basePath : null;
+    }
 
     // ---------------------------------------------------------------- Optionen für Auswahllisten
 

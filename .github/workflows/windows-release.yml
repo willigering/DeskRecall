@@ -63,8 +63,8 @@ jobs:
             -p:BuildNumber="$BUILD" -o publish/DeskRecall-portable-win-x64
           printf '%s\r\n' "Daten im Unterordner 'Daten' speichern. Datei loeschen, um %LOCALAPPDATA%\\DeskRecall zu verwenden." \
             > publish/DeskRecall-portable-win-x64/portable.flag
-          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-portable-win-x64/ 2>/dev/null || true
-          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-win-x64/ 2>/dev/null || true
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-portable-win-x64/
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-win-x64/
 
           # Ein ZIP je Kanal, keine Teilung des portablen Pakets.
           python - << PY

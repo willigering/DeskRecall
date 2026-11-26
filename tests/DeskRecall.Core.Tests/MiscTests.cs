@@ -181,7 +181,7 @@ public class RecordingTests
     [Fact]
     public void Startup_guard_blocks_until_released_or_grace_elapsed()
     {
-        var t0 = DateTimeOffset.Now;
+        var t0 = new DateTimeOffset(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1));
         var g = new StartupGuard(t0, TimeSpan.FromMinutes(3), active: true);
         Assert.False(g.IsReleased(t0.AddMinutes(1)));
         Assert.True(g.IsReleased(t0.AddMinutes(4)));
@@ -191,23 +191,33 @@ public class RecordingTests
     }
 
     [Fact]
-    public async Task Debouncer_coalesces_bursts()
+    public void Debouncer_coalesces_bursts()
     {
+        var clock = new FakeClock();
         var count = 0;
-        using var d = new ChangeDebouncer(TimeSpan.FromMilliseconds(80), TimeSpan.FromSeconds(5), () => Interlocked.Increment(ref count));
-        for (var i = 0; i < 20; i++) { d.Signal(); await Task.Delay(5); }
-        await Task.Delay(300);
+        using var d = new ChangeDebouncer(TimeSpan.FromMilliseconds(80), TimeSpan.FromSeconds(5), () => count++, clock);
+        for (var i = 0; i < 20; i++)
+        {
+            d.Signal();
+            clock.Advance(TimeSpan.FromMilliseconds(5));
+        }
+        clock.Advance(TimeSpan.FromMilliseconds(300));
         Assert.Equal(1, count);
     }
 
     [Fact]
-    public async Task Debouncer_fires_at_max_delay_under_constant_signals()
+    public void Debouncer_fires_at_max_delay_under_constant_signals()
     {
+        var clock = new FakeClock();
         var count = 0;
-        using var d = new ChangeDebouncer(TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(250), () => Interlocked.Increment(ref count));
-        var end = DateTime.UtcNow.AddMilliseconds(600);
-        while (DateTime.UtcNow < end) { d.Signal(); await Task.Delay(20); }
+        using var d = new ChangeDebouncer(TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(250), () => count++, clock);
+        for (var t = 0; t < 600; t += 20)
+        {
+            d.Signal();
+            clock.Advance(TimeSpan.FromMilliseconds(20));
+        }
         Assert.True(count >= 1);
+        Assert.Equal(2, count); // nach 250 ms und erneut nach 500 ms
     }
 
     [Fact]

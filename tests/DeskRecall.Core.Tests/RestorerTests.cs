@@ -28,10 +28,11 @@ public class SessionRestorerTests
         public FakeWindows Win = new();
         public FakeMonitors Mon = new();
         public FakeProcesses Proc;
+        public FakeClock Clock = new();
         public List<AppRule> Rules = new();
         public MemoryLogService Log = new();
         public World() { Proc = new FakeProcesses(Win); }
-        public SessionRestorer Restorer() => new(Win, Vd, Proc, Mon, new RuleEngine(() => Rules), Log, directoryExists: _ => true, fileExists: _ => true);
+        public SessionRestorer Restorer() => new(Win, Vd, Proc, Mon, new RuleEngine(() => Rules), Log, Clock, directoryExists: _ => true, fileExists: _ => true);
 
         public SessionSnapshot Snapshot(params WindowRecord[] windows)
         {
@@ -48,7 +49,7 @@ public class SessionRestorerTests
 
         /// <summary>Simuliert: Programm erzeugt nach kurzer Zeit sein Fenster.</summary>
         public void AppearsAfterLaunch(string proc, string title, long handle, string cls = "Cls", int delayMs = 60)
-            => Proc.OnLaunch[proc] = _ => Task.Delay(delayMs).ContinueWith(_ => Win.Add(T.W(proc, title, 0, cls: cls, handle: handle)));
+            => Proc.OnLaunch[proc] = _ => Clock.Schedule(TimeSpan.FromMilliseconds(delayMs), () => Win.Add(T.W(proc, title, 0, cls: cls, handle: handle)));
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public class SessionRestorerTests
             var splash = T.W("Photoshop", "Adobe Photoshop", 0, cls: "Photoshop", handle: 50);
             splash.HasCaption = false; splash.IsResizable = false;
             w.Win.Add(splash);
-            Task.Delay(150).ContinueWith(_ => { w.Win.Remove(50); w.Win.Add(T.W("Photoshop", "Adobe Photoshop 2026", 0, cls: "Photoshop", handle: 51)); });
+            w.Clock.Schedule(TimeSpan.FromMilliseconds(150), () => { w.Win.Remove(50); w.Win.Add(T.W("Photoshop", "Adobe Photoshop 2026", 0, cls: "Photoshop", handle: 51)); });
         };
         var snap = w.Snapshot(T.W("Photoshop", "Adobe Photoshop 2026", 1, cls: "Photoshop"));
         var report = await w.Restorer().RestoreAsync(snap, Fast);
@@ -136,7 +137,7 @@ public class SessionRestorerTests
         w.Proc.NeedsAdmin.Add("AdminTool");
         w.AppearsAfterLaunch("AdminTool", "Admin", 70);
         var consent = new Consent(true);
-        var restorer = new SessionRestorer(w.Win, w.Vd, w.Proc, w.Mon, new RuleEngine(() => w.Rules), w.Log, null, consent, _ => true, _ => true);
+        var restorer = new SessionRestorer(w.Win, w.Vd, w.Proc, w.Mon, new RuleEngine(() => w.Rules), w.Log, w.Clock, consent, _ => true, _ => true);
         var snap = w.Snapshot(T.W("AdminTool", "Admin"));
         var report = await restorer.RestoreAsync(snap, Fast with { ElevationPolicy = ElevationPolicy.Ask });
         Assert.True(consent.Asked);
@@ -212,9 +213,12 @@ public class SessionRestorerTests
     {
         var w = new World();
         w.AppearsAfterLaunch("slow", "s", 99, delayMs: 200);
+        w.Clock.Pause();
         var r = w.Restorer();
         var first = r.RestoreAsync(w.Snapshot(T.W("slow", "s")), Fast);
+        await w.Clock.WaitUntilPaused();
         await Assert.ThrowsAsync<InvalidOperationException>(() => r.RestoreAsync(w.Snapshot(), Fast));
+        w.Clock.Resume();
         await first;
     }
 }
