@@ -173,6 +173,9 @@ public sealed class SettingsViewModel : ObservableObject
     }
     public bool RunInBackground { get => S.General.RunInBackground; set { S.General.RunInBackground = value; Commit(); } }
     public bool AutoRestoreOnStartup { get => S.General.AutoRestoreOnStartup; set { S.General.AutoRestoreOnStartup = value; Commit(); } }
+    public string StartupProfileHint => string.IsNullOrWhiteSpace(S.Restore.StartupProfile)
+        ? "Beim Systemstart wird die letzte Sitzung geladen. Mit Snapshot im Widget legen Sie fest, welcher Zustand stattdessen geladen wird."
+        : $"Beim Systemstart wird das Profil „{S.Restore.StartupProfile}“ geladen.";
     public bool ShowTrayIcon { get => S.General.ShowTrayIcon; set { S.General.ShowTrayIcon = value; Commit(); } }
 
     public WidgetDock Dock { get => S.Widget.Dock; set { S.Widget.Dock = value; Commit(); } }

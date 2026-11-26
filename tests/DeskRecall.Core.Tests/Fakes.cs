@@ -103,7 +103,9 @@ internal sealed class FakeWindows : IWindowManager
     public bool IsAlive(long hwnd) { lock (Live) return Live.Any(w => w.Handle == hwnd); }
     public RectI? GetWindowBounds(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.NormalBounds : null;
     public WindowShowState? GetState(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.State : WindowShowState.Normal;
-    public bool ApplyPlacement(long hwnd, PlacementTarget target) { Applied[hwnd] = target; return true; }
+    /// <summary>Simuliert, dass SetWindowPlacement das Fenster vom Ziel-Desktop reißt.</summary>
+    public Action<long>? AfterApply { get; set; }
+    public bool ApplyPlacement(long hwnd, PlacementTarget target) { Applied[hwnd] = target; AfterApply?.Invoke(hwnd); return true; }
     public bool BringToFront(long hwnd) { Focused.Add(hwnd); return true; }
     public bool Minimize(long hwnd) => true;
     public bool Close(long hwnd) { Closed.Add(hwnd); return true; }

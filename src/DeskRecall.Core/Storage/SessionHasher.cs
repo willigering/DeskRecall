@@ -27,6 +27,7 @@ public static class SessionHasher
                 w.DesktopIndex,
                 w.IsPinned ? 1 : 0,
                 w.State,
+                w.Snap,
                 w.NormalBounds.ToString(),
                 w.MonitorId ?? "",
                 (w.ExplorerFolderPath ?? "").ToLowerInvariant(),

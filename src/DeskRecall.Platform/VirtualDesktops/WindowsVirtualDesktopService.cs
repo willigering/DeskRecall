@@ -262,13 +262,32 @@ public sealed class WindowsVirtualDesktopService : IVirtualDesktopService, IDisp
 
     public bool MoveWindowToDesktop(long hwnd, Guid desktopId)
     {
-        NativeMethods.GetWindowThreadProcessId((IntPtr)hwnd, out var pid);
-        if (pid == _ownPid && _public is { } pub)
-        {
-            try { if (_com.Invoke(() => pub.MoveWindowToDesktop((IntPtr)hwnd, ref desktopId)) == 0) return true; } catch { }
-        }
+        if (hwnd == 0 || desktopId == Guid.Empty) return false;
+        // Öffentliche API zuerst: die funktioniert für fremde Fenster (Teams, Browser). Die interne
+        // MoveView bleibt der Fallback, wenn die öffentliche API das Fenster nicht wirklich verschiebt.
+        if (TryPublicMove(hwnd, desktopId)) return true;
         if (_backend is null || _views is null) return false;
-        return Call("Fenster verschieben", false, b => WithView(hwnd, false, v => { b.MoveView(v, desktopId); return true; }));
+        var moved = Call("Fenster verschieben", false, b => WithView(hwnd, false, v => { b.MoveView(v, desktopId); return true; }));
+        if (!moved) return false;
+        var now = GetWindowDesktopId(hwnd);
+        return now is null || now == Guid.Empty || now == desktopId;
+    }
+
+    private bool TryPublicMove(long hwnd, Guid desktopId)
+    {
+        var pub = _public;
+        if (pub is null) return false;
+        try
+        {
+            return _com.Invoke(() =>
+            {
+                var id = desktopId;
+                if (pub.MoveWindowToDesktop((IntPtr)hwnd, ref id) != 0) return false;
+                if (pub.GetWindowDesktopId((IntPtr)hwnd, out var now) != 0 || now == Guid.Empty) return true;
+                return now == desktopId;
+            });
+        }
+        catch { return false; }
     }
 
     public bool SwitchToDesktop(Guid desktopId) => Call("Desktop wechseln", false, b =>

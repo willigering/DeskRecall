@@ -19,16 +19,16 @@ def zipit(path, fill):
     return os.path.getsize(path)
 
 # 1) Quellcode
-src_zip = os.path.join(ROOT, "DeskRecall-1.2.0-source.zip")
+src_zip = os.path.join(ROOT, "DeskRecall-1.2.1-source.zip")
 print("source", zipit(src_zip, lambda z: add_tree(z, SRC, "DeskRecall")))
 
 # 2) Framework-abhängige Version (klein)
-fd_zip = os.path.join(ROOT, "DeskRecall-1.2.0-win-x64.zip")
+fd_zip = os.path.join(ROOT, "DeskRecall-1.2.1-win-x64.zip")
 print("fd", zipit(fd_zip, lambda z: add_tree(z, os.path.join(SRC, "publish", "DeskRecall-win-x64"), "DeskRecall", skip=set())))
 
 # 3) Portable Version
 pdir = os.path.join(SRC, "publish", "DeskRecall-portable-win-x64")
-port_zip = os.path.join(ROOT, "DeskRecall-1.2.0-portable-win-x64.zip")
+port_zip = os.path.join(ROOT, "DeskRecall-1.2.1-portable-win-x64.zip")
 size = zipit(port_zip, lambda z: add_tree(z, pdir, "DeskRecall", skip=set()))
 print("portable", size)
 if size > LIMIT:
@@ -55,7 +55,7 @@ if size > LIMIT:
         f"SHA-256 von DeskRecall.exe: {sha}\r\n")
     out = []
     for i, data in enumerate(chunks):
-        part = os.path.join(ROOT, f"DeskRecall-1.2.0-portable-win-x64-teil{i+1}von{n}.zip")
+        part = os.path.join(ROOT, f"DeskRecall-1.2.1-portable-win-x64-teil{i+1}von{n}.zip")
         def fill(z, i=i, data=data):
             z.writestr(f"DeskRecall/{names[i]}", data, compress_type=zipfile.ZIP_STORED)
             if i == 0:

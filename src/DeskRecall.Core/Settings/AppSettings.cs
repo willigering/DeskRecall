@@ -74,6 +74,8 @@ public sealed class RestoreSettings
     public bool ActivateLastDesktop { get; set; } = true;
     public ElevationPolicy ElevatedApps { get; set; } = ElevationPolicy.Skip;
     public int LaunchStaggerMilliseconds { get; set; } = 700;
+    /// <summary>Profil, das beim Systemstart geladen wird. Leer = letzte Sitzung.</summary>
+    public string StartupProfile { get; set; } = "";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }
 

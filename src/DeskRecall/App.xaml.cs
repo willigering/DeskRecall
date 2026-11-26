@@ -192,6 +192,7 @@ public partial class App : Application
         menu.Items.Add(Item(_widget!.IsVisible ? "Widget ausblenden" : "Widget anzeigen", "\uE7C4", () => { if (_widget.IsVisible) _widget.Hide(); else _widget.ShowWidget(); }));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Jetzt sichern", "\uE74E", () => _ = c.SaveAsync(SessionKind.Manual)));
+        menu.Items.Add(Item("Snapshot …", "\uE722", () => _ = c.TakeSnapshotAsync()));
         menu.Items.Add(Item("Letzte Sitzung wiederherstellen", "\uE777", () => _ = c.RestoreLastAsync(), !c.IsRestoring));
         var profiles = new MenuItem { Header = "Profil laden", Icon = new TextBlock { Text = "\uE81E", FontFamily = (System.Windows.Media.FontFamily)FindResource("IconFont"), FontSize = 12 } };
         try

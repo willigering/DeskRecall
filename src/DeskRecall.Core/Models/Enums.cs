@@ -2,6 +2,25 @@ namespace DeskRecall.Core.Models;
 
 public enum WindowShowState { Normal, Minimized, Maximized }
 
+/// <summary>
+/// Wie das Fenster auf seinem Monitor liegt. Halbe und Viertel sind Snap-Zonen des Arbeitsbereichs,
+/// Vollbild deckt den ganzen Monitor ab (einschließlich Taskleiste), frei ist eine beliebige Position.
+/// </summary>
+public enum SnapLayout
+{
+    Free,
+    LeftHalf,
+    RightHalf,
+    TopHalf,
+    BottomHalf,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Maximized,
+    FullScreen,
+}
+
 public enum SessionKind { Auto, Manual, Shutdown, Profile, Imported }
 
 public enum AppKind { Normal, Browser, Explorer, Uwp, SingleInstance, NativeSession }
