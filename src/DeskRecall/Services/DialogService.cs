@@ -14,7 +14,7 @@ public interface IDialogService
 }
 
 /// <summary>Dialoge im DeskRecall-Design. Immer auf dem UI-Thread ausgeführt.</summary>
-public sealed class DialogService : IDialogService, IElevationConsent
+public sealed class DialogService : IDialogService, IElevationConsent, IBrowserSignInPrompt
 {
     private static T OnUi<T>(Func<T> f) => Application.Current.Dispatcher.CheckAccess() ? f() : Application.Current.Dispatcher.Invoke(f);
 
@@ -37,6 +37,12 @@ public sealed class DialogService : IDialogService, IElevationConsent
         var d = new Microsoft.Win32.SaveFileDialog { Title = title, Filter = filter, FileName = defaultName, OverwritePrompt = true };
         return d.ShowDialog() == true ? d.FileName : null;
     });
+
+    /// <summary>Browser läuft ohne Fenster. Die Anmeldung bleibt im Browser, DeskRecall speichert kein Passwort.</summary>
+    Task<bool> IBrowserSignInPrompt.ConfirmAsync(string browserName, CancellationToken ct)
+        => Task.FromResult(Confirm("Browser anmelden",
+            $"„{browserName}“ ist angemeldet und läuft im Hintergrund, zeigt aber kein Fenster.\n\nDie Anmeldung macht der Browser selbst. DeskRecall speichert kein Passwort und liest keine Browserdaten.\n\nJetzt öffnen und anmelden?",
+            "Anmelden", "Überspringen"));
 
     /// <summary>Wird von der Wiederherstellung gefragt, bevor ein Programm mit Administratorrechten (UAC) gestartet wird.</summary>
     public Task<bool> ConfirmAsync(string appName, CancellationToken ct)

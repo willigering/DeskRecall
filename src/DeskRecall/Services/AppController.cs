@@ -51,6 +51,7 @@ public sealed class AppController : IDisposable
     private bool _refreshPending;
     private int _quietUi;
     private bool _shutdownSaved;
+    private bool _shuttingDown;
     private bool _fullscreen;
     private long _lastRefreshTick;
     private long _lastFullscreenCheck;
@@ -72,6 +73,7 @@ public sealed class AppController : IDisposable
     public event Action<string, string>? Notification;
 
     public bool IsRestoring => _restorer.IsRunning;
+    public bool IsShuttingDown => _shuttingDown;
     public string? RestoreStatus { get; private set; }
     public RestoreReport? LastReport { get; private set; }
     /// <summary>Dauer der letzten Zustandserfassung inklusive etwaiger UI-Aktualisierung.</summary>
@@ -350,13 +352,15 @@ public sealed class AppController : IDisposable
 
     public async Task<SaveOutcome> SaveAsync(SessionKind kind)
     {
+        // Nach dem Herunterfahren-Knopf darf keine spätere, schon halb geschlossene Sicherung die gute überschreiben.
+        if (_shutdownSaved) return SaveOutcome.Rejected;
         if (kind is SessionKind.Auto)
         {
             if (!_guard.IsReleased(DateTimeOffset.Now)) { _log.Debug(Src, "Automatische Sicherung pausiert (Start-Schutz aktiv)"); return SaveOutcome.Rejected; }
             if (IsRestoring) return SaveOutcome.Rejected;
             if (_settings.Current.Backup.Mode == SaveMode.ManualOnly) return SaveOutcome.Rejected;
         }
-        if (!await _saveLock.WaitAsync(kind == SessionKind.Manual ? 10000 : 0)) return SaveOutcome.Rejected;
+        if (!await _saveLock.WaitAsync(kind is SessionKind.Manual or SessionKind.Shutdown ? 10000 : 0)) return SaveOutcome.Rejected;
         try
         {
             var outcome = await Task.Run(() =>
@@ -378,6 +382,87 @@ public sealed class AppController : IDisposable
             return SaveOutcome.Failed;
         }
         finally { _saveLock.Release(); }
+    }
+
+    /// <summary>
+    /// Sichert die Sitzung, solange die Fenster noch da sind, bittet Programme per WM_CLOSE ums Speichern und Beenden
+    /// und fährt Windows danach herunter. Kein hartes Beenden: ein Speichern-Dialog bleibt bedienbar.
+    /// </summary>
+    public async Task ShutdownComputerAsync()
+    {
+        if (_shuttingDown || IsRestoring) return;
+        if (!_dialogs.Confirm("Herunterfahren",
+                "Windows wird heruntergefahren.\n\nDie Sitzung wird vorher gesichert. Offene Programme werden zum Speichern und Beenden aufgefordert. Wenn ein Programm nachfragt, das Speichern kurz bestätigen.",
+                "Herunterfahren", "Abbrechen", danger: true)) return;
+
+        _shuttingDown = true;
+        RestoreStatus = "Sitzung wird gesichert …";
+        StatusChanged?.Invoke();
+        try
+        {
+            var outcome = await SaveAsync(SessionKind.Shutdown);
+            if (outcome == SaveOutcome.Failed)
+            {
+                RestoreStatus = null;
+                StatusChanged?.Invoke();
+                if (!_dialogs.Confirm("Sicherung fehlgeschlagen",
+                        "Die Sitzung konnte nicht gesichert werden. Trotzdem herunterfahren?",
+                        "Trotzdem herunterfahren", "Abbrechen", danger: true))
+                {
+                    _shuttingDown = false;
+                    return;
+                }
+            }
+            else if (outcome == SaveOutcome.Rejected)
+            {
+                _shuttingDown = false;
+                RestoreStatus = null;
+                StatusChanged?.Invoke();
+                _dialogs.Info("Herunterfahren", "Die Sicherung war gerade blockiert. Bitte kurz warten und erneut versuchen.");
+                return;
+            }
+
+            // Ab hier keine neue Sicherung mehr: schließende Fenster dürfen die gerade geschriebene Sitzung nicht ersetzen.
+            _shutdownSaved = true;
+            var windows = ShutdownPrep.Select(_windows.EnumerateAppWindows(detailed: false));
+            _log.Info(Src, $"Herunterfahren: {windows.Count} Fenster werden zum Speichern aufgefordert.");
+            RestoreStatus = windows.Count == 0 ? "Windows wird heruntergefahren …" : $"Programme werden geschlossen ({windows.Count}) …";
+            StatusChanged?.Invoke();
+            foreach (var w in windows)
+            {
+                try { _windows.Close(w.Handle); }
+                catch (Exception ex) { _log.Debug(Src, $"Schließen übersprungen ({w.ProcessName}): {ex.Message}"); }
+            }
+
+            var deadline = DateTimeOffset.UtcNow + ShutdownPrep.CloseGrace;
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                if (windows.All(w => !_windows.IsAlive(w.Handle))) break;
+                await Task.Delay(250);
+            }
+
+            var still = windows.Count(w => _windows.IsAlive(w.Handle));
+            if (still > 0) _log.Info(Src, $"{still} Fenster noch offen – Windows übernimmt das Speichern beim Herunterfahren.");
+
+            if (!SystemPower.RequestShutdown())
+            {
+                _shutdownSaved = false;
+                _shuttingDown = false;
+                RestoreStatus = null;
+                StatusChanged?.Invoke();
+                _log.Warn(Src, "Herunterfahren wurde von Windows abgelehnt.");
+                _dialogs.Info("Herunterfahren", "Windows hat das Herunterfahren abgelehnt. Die Sitzung bleibt gesichert.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _shutdownSaved = false;
+            _shuttingDown = false;
+            RestoreStatus = null;
+            StatusChanged?.Invoke();
+            _log.Error(Src, "Herunterfahren fehlgeschlagen", ex);
+            _dialogs.Info("Herunterfahren", "Das Herunterfahren konnte nicht gestartet werden: " + ex.Message);
+        }
     }
 
     /// <summary>Synchron (WM_QUERYENDSESSION / SessionEnding): schnell sichern, Herunterfahren nie blockieren.</summary>
@@ -487,7 +572,7 @@ public sealed class AppController : IDisposable
         var suggested = string.IsNullOrWhiteSpace(current) ? "Arbeitsplatz" : current;
         var raw = _dialogs.Prompt(
             "Snapshot",
-            "Name für diesen Zustand. Es wird gespeichert, was gerade geöffnet ist – Monitor, Position, Größe, Snap und jedes Fenster.\nAusgegraute, in dieser Sitzung geschlossene Apps gehören nicht dazu.\nGenau dieses Profil wird beim nächsten Systemstart geladen.",
+            "Name für diesen Zustand. Es wird gespeichert, was gerade geöffnet ist – Monitor, Position, Größe, Snap und jedes Fenster.\nAusgegraute Apps, Teams-Anrufe und herausgelöste Teams-Chats gehören nicht dazu: die lassen sich nicht wieder öffnen.\nGenau dieses Profil wird beim nächsten Systemstart geladen.",
             suggested,
             "Snapshot speichern");
         if (string.IsNullOrWhiteSpace(raw)) return false;
@@ -524,8 +609,10 @@ public sealed class AppController : IDisposable
             return false;
         }
         _settings.Update(s => { s.Restore.StartupProfile = name; s.ActiveProfile = name; });
+        var omitted = _recorder.LastOmissions;
+        var omittedNote = omitted.Count == 0 ? "" : " Nicht gespeichert: " + string.Join(", ", omitted.Take(4)) + (omitted.Count > 4 ? " …" : "") + ".";
         _log.Info(Src, $"Snapshot „{name}“: {snap.Windows.Count} Fenster auf {snap.Desktops.Count} Desktops, wird beim Systemstart geladen.");
-        Notification?.Invoke("Snapshot gespeichert", $"„{name}“ wird beim Systemstart geladen ({snap.Windows.Count} Fenster, {snap.Desktops.Count} Desktops).");
+        Notification?.Invoke("Snapshot gespeichert", $"„{name}“ wird beim Systemstart geladen ({snap.Windows.Count} Fenster, {snap.Desktops.Count} Desktops).{omittedNote}");
         StatusChanged?.Invoke();
         return true;
     }

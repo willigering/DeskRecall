@@ -438,6 +438,14 @@
                             <TextBlock Text="Snapshot" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource DangerButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch"
+                            Command="{Binding ShutdownCommand}"
+                            ToolTip="Sitzung sichern, Programme zum Speichern auffordern und Windows herunterfahren">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7E8;" Style="{StaticResource IconText}" FontSize="13" Margin="0,0,8,0" />
+                            <TextBlock Text="Herunterfahren" />
+                        </StackPanel>
+                    </Button>
                     <TextBlock Text="{Binding StartupHint}" Style="{StaticResource DimText}" FontSize="11" Margin="2,6,2,0" TextWrapping="Wrap" />
                     <Grid>
                         <Popup x:Name="HistoryPopup" Grid.ColumnSpan="2" PlacementTarget="{Binding ElementName=HistoryButton}" Placement="Top" VerticalOffset="-8"

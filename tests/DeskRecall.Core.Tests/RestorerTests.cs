@@ -321,6 +321,99 @@ public class SessionRestorerTests
     }
 
     [Fact]
+    public async Task Teams_restore_starts_only_the_main_window()
+    {
+        var w = new World();
+        w.AppearsAfterLaunch("ms-teams", "Microsoft Teams", 8);
+        var main = T.W("ms-teams", "Microsoft Teams", 1, RectI.FromSize(100, 80, 1100, 800), kind: AppKind.SingleInstance);
+        var chat = T.W("ms-teams", "Chat", 1, RectI.FromSize(40, 40, 480, 640), kind: AppKind.SingleInstance);
+        var room = T.W("ms-teams", "Raum", 2, RectI.FromSize(0, 0, 1400, 900), kind: AppKind.SingleInstance);
+
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(chat, room, main), Fast);
+
+        Assert.Equal(new[] { RestoreItemStatus.Skipped, RestoreItemStatus.Skipped, RestoreItemStatus.Restored }, report.Items.Select(i => i.Status).ToArray());
+        Assert.Equal("Nebenfenster – Teams-Anruf oder Chat wird nicht wiederhergestellt", report.Items[0].Message);
+        Assert.Single(w.Proc.Launched);
+        Assert.Equal(w.Vd.Desktops[1].Id, w.Vd.WindowDesktop[8]);
+        Assert.DoesNotContain(report.Items, i => i.Status == RestoreItemStatus.TimedOut);
+    }
+
+    [Fact]
+    public async Task Open_teams_main_window_is_placed_without_waiting_for_side_windows()
+    {
+        var w = new World();
+        w.Win.Add(T.W("ms-teams", "Microsoft Teams", handle: 7, kind: AppKind.SingleInstance));
+        w.Proc.Running.Add(new RunningProcess(1, "ms-teams", null));
+        var main = T.W("ms-teams", "Microsoft Teams", 2, kind: AppKind.SingleInstance);
+        var chat = T.W("ms-teams", "Chat", 0, kind: AppKind.SingleInstance);
+
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(chat, main), Fast);
+
+        Assert.Equal(RestoreItemStatus.Skipped, report.Items[0].Status);
+        Assert.Equal(RestoreItemStatus.AlreadyRunning, report.Items[1].Status);
+        Assert.Empty(w.Proc.Launched);
+        Assert.Equal(w.Vd.Desktops[2].Id, w.Vd.WindowDesktop[7]);
+    }
+
+    [Fact]
+    public async Task Teams_call_and_chat_alone_are_not_started()
+    {
+        var w = new World();
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(
+            T.W("ms-teams", "Chat", 1, kind: AppKind.SingleInstance),
+            T.W("ms-teams", "Raum", 2, kind: AppKind.SingleInstance)), Fast);
+
+        Assert.All(report.Items, i => Assert.Equal(RestoreItemStatus.Skipped, i.Status));
+        Assert.Empty(w.Proc.Launched);
+    }
+
+    [Fact]
+    public async Task Signed_in_browser_without_a_window_asks_before_it_is_opened()
+    {
+        var w = new World();
+        w.Proc.Running.Add(new RunningProcess(3, "msedge", null));
+        w.AppearsAfterLaunch("msedge", "Microsoft Edge", 9);
+        var saved = T.W("msedge", "Microsoft Edge", 1, kind: AppKind.Browser);
+        saved.DisplayName = "Microsoft Edge";
+        var prompt = new SignInPrompt(true);
+        var restorer = new SessionRestorer(w.Win, w.Vd, w.Proc, w.Mon, new RuleEngine(() => w.Rules), w.Log, w.Clock,
+            directoryExists: _ => true, fileExists: _ => true, browserSignIn: prompt);
+
+        var report = await restorer.RestoreAsync(w.Snapshot(saved), Fast);
+
+        Assert.Equal(new[] { "Microsoft Edge" }, prompt.Asked);
+        Assert.Equal(RestoreItemStatus.Restored, report.Items.Single().Status);
+        Assert.Single(w.Proc.Launched);
+        Assert.Equal(w.Vd.Desktops[1].Id, w.Vd.WindowDesktop[9]);
+    }
+
+    [Fact]
+    public async Task Declined_browser_sign_in_leaves_the_browser_in_the_background()
+    {
+        var w = new World();
+        w.Proc.Running.Add(new RunningProcess(3, "msedge", null));
+        var prompt = new SignInPrompt(false);
+        var restorer = new SessionRestorer(w.Win, w.Vd, w.Proc, w.Mon, new RuleEngine(() => w.Rules), w.Log, w.Clock,
+            directoryExists: _ => true, fileExists: _ => true, browserSignIn: prompt);
+
+        var report = await restorer.RestoreAsync(w.Snapshot(T.W("msedge", "Start", 1, kind: AppKind.Browser)), Fast);
+
+        Assert.Equal(RestoreItemStatus.Skipped, report.Items.Single().Status);
+        Assert.Contains("Anmeldung übersprungen", report.Items.Single().Message);
+        Assert.Empty(w.Proc.Launched);
+    }
+
+    private sealed class SignInPrompt(bool answer) : IBrowserSignInPrompt
+    {
+        public List<string> Asked { get; } = new();
+        public Task<bool> ConfirmAsync(string browserName, CancellationToken ct)
+        {
+            Asked.Add(browserName);
+            return Task.FromResult(answer);
+        }
+    }
+
+    [Fact]
     public async Task Unknown_desktop_index_still_follows_the_saved_desktop_id()
     {
         var w = new World();
