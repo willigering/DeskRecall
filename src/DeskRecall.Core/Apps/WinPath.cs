@@ -33,6 +33,13 @@ public static class WinPath
         return dir.Length == 0 ? null : dir;
     }
 
+    public static string GetExtension(string? path)
+    {
+        var f = GetFileName(path);
+        var dot = f.LastIndexOf('.');
+        return dot <= 0 ? "" : f[dot..];
+    }
+
     public static string Combine(string dir, string name)
     {
         if (string.IsNullOrEmpty(dir)) return name;

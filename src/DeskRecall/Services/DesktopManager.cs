@@ -49,6 +49,8 @@ public sealed class DesktopManager
 
     public Task<bool> CloseWindowAsync(long hwnd) => Run("Fenster schließen", () => _windows.Close(hwnd));
 
+    public Task<bool> ApplyPlacementAsync(long hwnd, PlacementTarget target) => Run("Fenster anordnen", () => _windows.ApplyPlacement(hwnd, target));
+
     private Task<bool> Run(string what, Func<bool> action) => Task.Run(() =>
     {
         try

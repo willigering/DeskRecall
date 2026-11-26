@@ -1,0 +1,115 @@
+name: DeskRecall Windows-Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - Directory.Build.props
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deskrecall-windows-release
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Version prüfen
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1 | tr -d '\r')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          build="$(tr -d '[:space:]' < build-number.txt)"
+          [[ "$build" =~ ^[0-9]+$ ]]
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release $tag existiert bereits – übersprungen."
+          fi
+
+      - name: Tests ausführen
+        if: steps.version.outputs.exists != 'true'
+        run: dotnet test tests/DeskRecall.Core.Tests/DeskRecall.Core.Tests.csproj -c Release -p:BuildNumber=${{ steps.version.outputs.build }}
+
+      - name: Windows-Pakete erstellen
+        if: steps.version.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD="${{ steps.version.outputs.build }}"
+          APP=src/DeskRecall/DeskRecall.csproj
+          rm -rf publish release-assets
+          mkdir -p release-assets
+          dotnet publish "$APP" -c Release -r win-x64 --self-contained false -p:BuildNumber="$BUILD" -o publish/DeskRecall-win-x64
+          dotnet publish "$APP" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true \
+            -p:BuildNumber="$BUILD" -o publish/DeskRecall-portable-win-x64
+          printf '%s\r\n' "Daten im Unterordner 'Daten' speichern. Datei loeschen, um %LOCALAPPDATA%\\DeskRecall zu verwenden." \
+            > publish/DeskRecall-portable-win-x64/portable.flag
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-portable-win-x64/ 2>/dev/null || true
+          cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-win-x64/ 2>/dev/null || true
+
+          # Ein ZIP je Kanal, keine Teilung des portablen Pakets.
+          python - << PY
+          import hashlib, os, zipfile
+          version = "$VERSION"
+          def pack(src, dest):
+              if os.path.exists(dest): os.remove(dest)
+              with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+                  for root, dirs, files in os.walk(src):
+                      dirs.sort(); files.sort()
+                      for f in files:
+                          p = os.path.join(root, f)
+                          z.write(p, os.path.join("DeskRecall", os.path.relpath(p, src)))
+              digest = hashlib.sha256(open(dest, "rb").read()).hexdigest()
+              with open(dest + ".sha256", "w", newline="\n") as out:
+                  out.write(f"{digest}  {os.path.basename(dest)}\n")
+              print(dest, os.path.getsize(dest), digest)
+          pack("publish/DeskRecall-win-x64", f"release-assets/DeskRecall-{version}-win-x64.zip")
+          pack("publish/DeskRecall-portable-win-x64", f"release-assets/DeskRecall-{version}-portable-win-x64.zip")
+          PY
+
+      - name: Versionshinweise
+        if: steps.version.outputs.exists != 'true'
+        shell: bash
+        run: |
+          cat > Versionshinweise.txt << 'EOF'
+          DeskRecall ${{ steps.version.outputs.version }} (Build ${{ steps.version.outputs.build }})
+
+          Die portable Variante (`DeskRecall-*-portable-win-x64.zip`) enthält die Laufzeit und benötigt keine Installation.
+          Die kleine Variante (`DeskRecall-*-win-x64.zip`) setzt die .NET 10 Desktop Runtime x64 voraus.
+
+          Begleitende `.sha256`-Dateien prüfen die Archive. Beim Aktualisieren aus der App werden Größe und – sofern veröffentlicht – SHA-256 geprüft. Sitzungsdaten bleiben erhalten.
+          EOF
+          sed -i 's/^          //' Versionshinweise.txt
+
+      - name: Windows-Release veröffentlichen
+        if: steps.version.outputs.exists != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DeskRecall ${VERSION}" \
+            --notes-file Versionshinweise.txt --latest \
+            "release-assets/DeskRecall-${VERSION}-win-x64.zip" \
+            "release-assets/DeskRecall-${VERSION}-win-x64.zip.sha256" \
+            "release-assets/DeskRecall-${VERSION}-portable-win-x64.zip" \
+            "release-assets/DeskRecall-${VERSION}-portable-win-x64.zip.sha256"

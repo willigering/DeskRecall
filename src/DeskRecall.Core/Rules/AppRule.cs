@@ -30,6 +30,12 @@ public sealed class AppRule
     public bool ApplyLive { get; set; }
 
     public string? IconPath { get; set; }
+    /// <summary>Vollständiger Pfad der ausführbaren Datei (zum Starten angehefteter Programme).</summary>
+    public string? ExecutablePath { get; set; }
+    /// <summary>AUMID für UWP- oder Store-Apps.</summary>
+    public string? AppUserModelId { get; set; }
+    /// <summary>Vom Benutzer fest auf einen Desktop geheftet: dort starten und bei Bedarf hin verschieben.</summary>
+    public bool IsPinnedEntry { get; set; }
 
     public AppRule Clone() => (AppRule)MemberwiseClone();
 

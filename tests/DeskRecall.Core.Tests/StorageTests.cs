@@ -236,9 +236,9 @@ public class SettingsServiceTests
     {
         var dir = T.TempDir();
         var path = Path.Combine(dir, "settings.json");
-        File.WriteAllText(path, "{ \"schemaVersion\": 1, \"zukunftsFeature\": { \"a\": 1 }, \"widget\": { \"expandedWidth\": 310, \"neueOption\": true } }");
+        File.WriteAllText(path, "{ \"schemaVersion\": 1, \"zukunftsFeature\": { \"a\": 1 }, \"widget\": { \"expandedWidth\": 300, \"neueOption\": true } }");
         var svc = new SettingsService(path, new MemoryLogService());
-        Assert.Equal(310, svc.Current.Widget.ExpandedWidth);
+        Assert.Equal(300, svc.Current.Widget.ExpandedWidth);
         svc.Update(s => s.Widget.OpacityPercent = 70);
         var text = File.ReadAllText(path);
         Assert.Contains("zukunftsFeature", text);
@@ -263,9 +263,9 @@ public class SettingsServiceTests
         var s = new AppSettings();
         s.Widget.ExpandedWidth = 5000; s.Backup.HistoryCount = 0; s.Widget.OpacityPercent = 3;
         SettingsService.Normalize(s);
-        Assert.Equal(360, s.Widget.ExpandedWidth);
+        Assert.Equal(320, s.Widget.ExpandedWidth);
         Assert.Equal(3, s.Backup.HistoryCount);
-        Assert.Equal(40, s.Widget.OpacityPercent);
+        Assert.Equal(30, s.Widget.OpacityPercent);
     }
 
     [Fact]

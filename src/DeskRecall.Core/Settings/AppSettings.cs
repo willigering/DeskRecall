@@ -18,6 +18,7 @@ public sealed class AppSettings
     public MonitorSettings Monitors { get; set; } = new();
     public ExclusionSettings Exclusions { get; set; } = new();
     public DiagnosticsSettings Diagnostics { get; set; } = new();
+    public UpdateSettings Update { get; set; } = new();
     public List<AppRule> Rules { get; set; } = new();
     public string ActiveProfile { get; set; } = SessionProfile.DefaultName;
 
@@ -122,5 +123,16 @@ public sealed class DiagnosticsSettings
 {
     public bool VerboseLogging { get; set; }
     public int LogRetentionDays { get; set; } = 14;
+    [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class UpdateSettings
+{
+    /// <summary>Beim Start und etwa alle 6 Stunden nach Updates suchen.</summary>
+    public bool CheckAutomatically { get; set; } = true;
+    /// <summary>Öffentliche GitHub-Releases-API. Leer = Standard-Feed von willigering/DeskRecall.</summary>
+    public string FeedUrl { get; set; } = "";
+    /// <summary>Diese Version nicht erneut anbieten (Anzeigeform 1.2.3).</summary>
+    public string? SkippedVersion { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }

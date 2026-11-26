@@ -1,5 +1,6 @@
 using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Models;
+using DeskRecall.Core.Rules;
 using DeskRecall.Core.Settings;
 
 namespace DeskRecall.Core.Restore;
@@ -29,6 +30,7 @@ public sealed record RestoreOptions
     public bool DryRun { get; init; }
     public IReadOnlyCollection<string> ExcludedProcesses { get; init; } = Array.Empty<string>();
     public IReadOnlyCollection<string> ExcludedTitles { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<AppRule> PinnedEntries { get; init; } = Array.Empty<AppRule>();
 
     public static RestoreOptions FromSettings(AppSettings s, bool dryRun = false) => new()
     {
@@ -47,6 +49,7 @@ public sealed record RestoreOptions
         DryRun = dryRun,
         ExcludedProcesses = s.Exclusions.ProcessNames.ToArray(),
         ExcludedTitles = s.Exclusions.TitleContains.ToArray(),
+        PinnedEntries = s.Rules.Where(r => r.IsPinnedEntry).ToList(),
     };
 }
 
