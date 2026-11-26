@@ -68,7 +68,7 @@ public sealed class RestoreSettings
 {
     public int StartupDelaySeconds { get; set; } = 8;
     public bool LaunchMissingApps { get; set; } = true;
-    public int WindowTimeoutSeconds { get; set; } = 60;
+    public int WindowTimeoutSeconds { get; set; } = 120;
     public bool RestoreExplorerFolders { get; set; } = true;
     public bool UseBrowserSessionRestore { get; set; } = true;
     public bool ActivateLastDesktop { get; set; } = true;

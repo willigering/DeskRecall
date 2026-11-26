@@ -7,12 +7,12 @@ namespace DeskRecall.Core.Tests;
 public class ShutdownPrepTests
 {
     [Fact]
-    public void Closes_user_apps_once_and_skips_shell_and_itself()
+    public void Closes_user_apps_once_and_skips_shell_browsers_and_itself()
     {
-        var chrome = T.W("chrome", "Seite", handle: 10);
-        var chromeAgain = T.W("chrome", "Seite", handle: 10);
+        var chrome = T.W("chrome", "Seite", cls: "Chrome_WidgetWin_1", handle: 10);
+        var chromeAgain = T.W("chrome", "Seite", cls: "Chrome_WidgetWin_1", handle: 10);
         var teams = T.W("ms-teams", "Chat", handle: 11);
-        var edge = T.W("msedge", "Edge", handle: 12);
+        var edge = T.W("msedge", "Edge", cls: "Chrome_WidgetWin_1", handle: 12);
         var selected = ShutdownPrep.Select(new[]
         {
             chrome, chromeAgain, teams, edge,
@@ -24,7 +24,7 @@ public class ShutdownPrepTests
             T.W("", "leer", handle: 24),
         });
 
-        Assert.Equal(new long[] { 10, 11, 12 }, selected.Select(w => w.Handle).ToArray());
+        Assert.Equal(new long[] { 11 }, selected.Select(w => w.Handle).ToArray());
     }
 
     [Fact]

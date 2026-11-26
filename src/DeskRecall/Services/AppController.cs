@@ -128,10 +128,24 @@ public sealed class AppController : IDisposable
             RestoreStatus = $"Wiederherstellung startet in {delay.TotalSeconds:0} s …";
             StatusChanged?.Invoke();
             await Task.Delay(delay);
+            await WaitForShellAsync(TimeSpan.FromSeconds(60));
             await RestoreAsync(snapshot, label, offerCloseExtras: false);
         }
         catch (Exception ex) { _log.Error(Src, "Automatische Wiederherstellung fehlgeschlagen", ex); }
         finally { _guard.Release(); }
+    }
+
+    /// <summary>Beim Anmelden startet DeskRecall parallel zur Shell: erst weitermachen, wenn die Taskleiste da ist.</summary>
+    private async Task WaitForShellAsync(TimeSpan max)
+    {
+        var until = DateTimeOffset.UtcNow + max;
+        while (DateTimeOffset.UtcNow < until)
+        {
+            try { if (DeskRecall.Platform.Interop.NativeMethods.FindWindow("Shell_TrayWnd", null) != IntPtr.Zero) return; }
+            catch { return; }
+            await Task.Delay(500);
+        }
+        _log.Warn(Src, "Taskleiste nach 60 s nicht gefunden – Wiederherstellung startet trotzdem.");
     }
 
     public void ApplySettings()

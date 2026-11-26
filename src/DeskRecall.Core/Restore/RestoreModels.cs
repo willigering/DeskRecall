@@ -27,6 +27,8 @@ public sealed record RestoreOptions
     public bool CorrectOffscreenWindows { get; init; } = true;
     public MonitorFallback MonitorFallback { get; init; } = MonitorFallback.Primary;
     public ElevationPolicy ElevationPolicy { get; init; } = ElevationPolicy.Skip;
+    /// <summary>Wie oft ein gestartetes Programm nach einer Zeitüberschreitung ohne Fenster noch einmal gestartet wird.</summary>
+    public int LaunchRetries { get; init; }
     public bool DryRun { get; init; }
     public IReadOnlyCollection<string> ExcludedProcesses { get; init; } = Array.Empty<string>();
     public IReadOnlyCollection<string> ExcludedTitles { get; init; } = Array.Empty<string>();
@@ -46,6 +48,7 @@ public sealed record RestoreOptions
         CorrectOffscreenWindows = s.Monitors.CorrectOffscreenWindows,
         MonitorFallback = s.Monitors.Fallback,
         ElevationPolicy = s.Restore.ElevatedApps,
+        LaunchRetries = 1,
         DryRun = dryRun,
         ExcludedProcesses = s.Exclusions.ProcessNames.ToArray(),
         ExcludedTitles = s.Exclusions.TitleContains.ToArray(),
@@ -71,6 +74,8 @@ public sealed class RestoreItem
     public bool WasLaunched { get; set; }
     /// <summary>Prozess lief schon ohne Fenster und wurde einmal zusätzlich gestartet.</summary>
     public bool WakeAttempted { get; set; }
+    /// <summary>Wie oft nach einer Zeitüberschreitung erneut gestartet wurde.</summary>
+    public int Retries { get; set; }
     /// <summary>Für einen Browser im Hintergrund wurde schon nach der Anmeldung gefragt.</summary>
     public bool SignInOffered { get; set; }
     public DateTimeOffset? WaitDeadline { get; set; }

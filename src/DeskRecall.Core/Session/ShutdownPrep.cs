@@ -1,4 +1,5 @@
 using DeskRecall.Core.Apps;
+using DeskRecall.Core.Browsers;
 using DeskRecall.Core.Models;
 
 namespace DeskRecall.Core.Session;
@@ -18,6 +19,10 @@ public static class ShutdownPrep
         if (window.Handle == 0) return false;
         if (AppIdentity.NormalizeProcessName(window.ProcessName).Length == 0) return false;
         if (AppCatalog.IsNeverLaunch(window.ProcessName)) return false;
+        // Browser nicht Fenster für Fenster schließen: Chromium/Firefox würden die früh geschlossenen Fenster
+        // als „vom Benutzer geschlossen“ werten und nach dem Neustart nur das letzte Fenster wiederherstellen.
+        // Beim Herunterfahren von Windows sichern sie dagegen alle Fenster samt Tabs.
+        if (BrowserCatalog.Detect(window.ProcessName, window.WindowClass) != BrowserFamily.None) return false;
         return true;
     }
 

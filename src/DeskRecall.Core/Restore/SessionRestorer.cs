@@ -154,9 +154,18 @@ public sealed class SessionRestorer : ISessionRestorer
                 var t = _clock.Now;
                 var wake = new List<RestoreItem>();
                 var signIn = new List<RestoreItem>();
+                var retry = new List<RestoreItem>();
                 foreach (var i in waiting.Where(i => i.WaitDeadline is { } d && t > d))
                 {
-                    if (i.WasLaunched)
+                    if (i.WasLaunched && i.Retries < o.LaunchRetries && ShouldWake(i, o))
+                    {
+                        // Launcher beendet sich oft sofort (Steam, Discord, Teams) oder der Start dauert beim Booten lange: noch einmal versuchen.
+                        i.Retries++;
+                        i.WaitDeadline = t + o.WindowTimeout;
+                        i.Message = "kein Fenster – zweiter Startversuch";
+                        retry.Add(i);
+                    }
+                    else if (i.WasLaunched)
                     {
                         i.Status = RestoreItemStatus.TimedOut;
                         i.Message = $"kein passendes Fenster nach {o.WindowTimeout.TotalSeconds:0} s (Programm unterstützt evtl. keine exakte Wiederherstellung)";
@@ -199,6 +208,11 @@ public sealed class SessionRestorer : ISessionRestorer
                             }
                         }
                     }
+                }
+                if (retry.Count > 0)
+                {
+                    _log.Info(Src, "Kein Fenster erschienen – zweiter Startversuch: " + string.Join(", ", retry.Select(i => i.Saved.FriendlyName).Distinct()));
+                    await ExecuteLaunchesAsync(retry, o, report, progress, total, wake: true, ct).ConfigureAwait(false);
                 }
                 if (wake.Count > 0)
                 {
