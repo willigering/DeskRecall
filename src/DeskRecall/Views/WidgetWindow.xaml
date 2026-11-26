@@ -78,12 +78,9 @@
                                    Visibility="{Binding HasTabs, Converter={StaticResource BoolToVis}}" ToolTip="Tabs auf- oder zuklappen" />
                     </Grid>
                 </Border>
-                <Border x:Name="TabsHost" Margin="10,0,0,0" ClipToBounds="True"
-                        Opacity="0" Visibility="Collapsed" RenderTransformOrigin="0,0"
-                        ui:ExpandChrome.IsOpen="{Binding TabsOpen}">
-                    <Border.RenderTransform>
-                        <ScaleTransform ScaleY="0" />
-                    </Border.RenderTransform>
+                <!-- Ohne Animation: ein verschachtelter ExpandChrome blieb in einem zugeklappten Elternbereich unsichtbar. -->
+                <Border x:Name="TabsHost" Margin="10,0,0,0"
+                        Visibility="{Binding TabsOpen, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Tabs}" ItemTemplate="{StaticResource TabRowTemplate}" Focusable="False" />
                 </Border>
             </StackPanel>
