@@ -106,13 +106,6 @@
                                 <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="Jetzt aktualisieren" Command="{Binding Updates.InstallCommand}" MinWidth="160" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
-                        <Border Style="{StaticResource SettingsCard}">
-                            <StackPanel>
-                                <TextBlock Text="Update-Feed (optional)" />
-                                <TextBlock Text="Standard ist die öffentliche GitHub-Release-API dieses Projekts. Nur ändern, wenn die Releases unter einer anderen öffentlichen Adresse liegen." Style="{StaticResource DimText}" Margin="0,2,0,8" TextWrapping="Wrap" />
-                                <TextBox Text="{Binding FeedUrl, UpdateSourceTrigger=LostFocus}" />
-                            </StackPanel>
-                        </Border>
                         <TextBlock Text="Widget-Verhalten" Style="{StaticResource SectionText}" />
                         <Border Style="{StaticResource SettingsCard}">
                             <Grid>

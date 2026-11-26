@@ -21,6 +21,8 @@ public interface IVirtualDesktopService
     Guid? GetCurrentDesktopId();
     Guid? GetWindowDesktopId(long hwnd);
     bool IsWindowPinned(long hwnd);
+    /// <summary>Anheftstatus mehrerer Fenster in einem Durchlauf (eine COM-Runde).</summary>
+    IReadOnlyDictionary<long, bool> GetWindowsPinned(IReadOnlyList<long> hwnds);
 
     bool MoveWindowToDesktop(long hwnd, Guid desktopId);
     bool SetWindowPinned(long hwnd, bool pinned);
@@ -37,8 +39,10 @@ public sealed record PlacementTarget(RectI NormalBounds, WindowShowState State, 
 
 public interface IWindowManager
 {
-    /// <summary>Alle für den Benutzer sichtbaren Programmfenster (Alt-Tab-Kriterien), auf allen Desktops.</summary>
-    IReadOnlyList<WindowRecord> EnumerateAppWindows();
+    /// <summary>Alle für den Benutzer sichtbaren Programmfenster (Alt-Tab-Kriterien), auf allen Desktops.
+    /// <paramref name="detailed"/> liest Dokumentpfade, Explorer-Ordner und Dateibeschreibungen (für Sicherungen).
+    /// Für die laufende Oberfläche reicht <c>false</c>.</summary>
+    IReadOnlyList<WindowRecord> EnumerateAppWindows(bool detailed = true);
     bool IsAlive(long hwnd);
     RectI? GetWindowBounds(long hwnd);
     WindowShowState? GetState(long hwnd);

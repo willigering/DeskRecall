@@ -220,12 +220,36 @@ public sealed class WindowsVirtualDesktopService : IVirtualDesktopService, IDisp
         });
     }
 
-    public bool IsWindowPinned(long hwnd)
+    public bool IsWindowPinned(long hwnd) => GetWindowsPinned(new[] { hwnd }).TryGetValue(hwnd, out var p) && p;
+
+    public IReadOnlyDictionary<long, bool> GetWindowsPinned(IReadOnlyList<long> hwnds)
     {
         var pinned = _pinned;
-        if (pinned is null) return false;
-        try { return WithView(hwnd, false, v => pinned.IsViewPinned(v, out var p) == 0 && p != 0); }
-        catch { return false; }
+        var views = _views;
+        if (pinned is null || views is null || hwnds.Count == 0) return new Dictionary<long, bool>();
+        try
+        {
+            return _com.Invoke(() =>
+            {
+                var d = new Dictionary<long, bool>(hwnds.Count);
+                foreach (var h in hwnds)
+                {
+                    if (views.GetViewForHwnd((IntPtr)h, out var view) != 0 || view == IntPtr.Zero)
+                    {
+                        d[h] = false;
+                        continue;
+                    }
+                    try { d[h] = pinned.IsViewPinned(view, out var p) == 0 && p != 0; }
+                    finally { Marshal.Release(view); }
+                }
+                return d;
+            });
+        }
+        catch (Exception ex)
+        {
+            if (IsDisconnected(ex)) Reinitialize();
+            return new Dictionary<long, bool>();
+        }
     }
 
     public bool SetWindowPinned(long hwnd, bool pin)

@@ -43,14 +43,31 @@
 
     <CornerRadius x:Key="CardRadius">8</CornerRadius>
 
-    <!-- ===== Logo (2×2 lila Quadrate) ===== -->
+    <!-- Logo: Desktop-Karte mit Wiederherstellen-Pfeil (für 16–22 px, ohne Kachel) -->
     <DrawingImage x:Key="LogoImage">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <GeometryDrawing Brush="#FFA78BFA" Geometry="M1.6,0 H8.4 A1.6,1.6 0 0 1 10,1.6 V8.4 A1.6,1.6 0 0 1 8.4,10 H1.6 A1.6,1.6 0 0 1 0,8.4 V1.6 A1.6,1.6 0 0 1 1.6,0 Z" />
-                <GeometryDrawing Brush="#FF8B6CF0" Geometry="M13.6,0 H20.4 A1.6,1.6 0 0 1 22,1.6 V8.4 A1.6,1.6 0 0 1 20.4,10 H13.6 A1.6,1.6 0 0 1 12,8.4 V1.6 A1.6,1.6 0 0 1 13.6,0 Z" />
-                <GeometryDrawing Brush="#FF7C5CE6" Geometry="M1.6,12 H8.4 A1.6,1.6 0 0 1 10,13.6 V20.4 A1.6,1.6 0 0 1 8.4,22 H1.6 A1.6,1.6 0 0 1 0,20.4 V13.6 A1.6,1.6 0 0 1 1.6,12 Z" />
-                <GeometryDrawing Brush="#CCA78BFA" Geometry="M13.6,12 H20.4 A1.6,1.6 0 0 1 22,13.6 V20.4 A1.6,1.6 0 0 1 20.4,22 H13.6 A1.6,1.6 0 0 1 12,20.4 V13.6 A1.6,1.6 0 0 1 13.6,12 Z" />
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <LinearGradientBrush StartPoint="24,24" EndPoint="232,232" MappingMode="Absolute">
+                            <GradientStop Color="#FFA78BFA" Offset="0" />
+                            <GradientStop Color="#FF8B6CF0" Offset="1" />
+                        </LinearGradientBrush>
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="32,44,192,168" RadiusX="32" RadiusY="32" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Geometry="M114.541 77.772 A52.000 52.000 0 1 0 176.953 110.462">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF1E1B26" Thickness="32" StartLineCap="Round" EndLineCap="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="#FF1E1B26" Geometry="M210.844 98.319 L158.335 58.496 L143.062 122.604 Z">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="#FF1E1B26" Thickness="7" LineJoin="Round" />
+                    </GeometryDrawing.Pen>
+                </GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using DeskRecall.Core.Abstractions;
@@ -33,7 +34,9 @@ public sealed class AppController : IDisposable
     private readonly IVirtualDesktopService _vd;
     private readonly IDialogService _dialogs;
     private readonly ILogService _log;
+    private readonly IconService _icons;
     private readonly Dispatcher _ui;
+    private const int MinUiRefreshMs = 250;
 
     private WinEventMonitor? _events;
     private ChangeDebouncer? _saveDebouncer;
@@ -45,15 +48,18 @@ public sealed class AppController : IDisposable
     private readonly HashSet<long> _liveRuleHandled = new();
     private int _refreshing;
     private bool _refreshPending;
+    private int _quietUi;
     private bool _shutdownSaved;
     private bool _fullscreen;
+    private long _lastRefreshTick;
+    private long _lastFullscreenCheck;
     private CancellationTokenSource? _restoreCts;
 
     public AppController(ISettingsService settings, ISessionStore store, IProfileManager profiles, SessionRecorder recorder, ISessionRestorer restorer,
-        IRuleEngine rules, IWindowManager windows, IVirtualDesktopService vd, IDialogService dialogs, ILogService log)
+        IRuleEngine rules, IWindowManager windows, IVirtualDesktopService vd, IDialogService dialogs, ILogService log, IconService icons)
     {
         _settings = settings; _store = store; _profiles = profiles; _recorder = recorder; _restorer = restorer;
-        _rules = rules; _windows = windows; _vd = vd; _dialogs = dialogs; _log = log;
+        _rules = rules; _windows = windows; _vd = vd; _dialogs = dialogs; _log = log; _icons = icons;
         _ui = Application.Current.Dispatcher;
         _settings.Changed += _ => _ui.BeginInvoke(ApplySettings);
     }
@@ -67,6 +73,10 @@ public sealed class AppController : IDisposable
     public bool IsRestoring => _restorer.IsRunning;
     public string? RestoreStatus { get; private set; }
     public RestoreReport? LastReport { get; private set; }
+    /// <summary>Dauer der letzten Zustandserfassung inklusive etwaiger UI-Aktualisierung.</summary>
+    public TimeSpan LastRefreshDuration { get; private set; }
+    public int LastRefreshWindowCount { get; private set; }
+    public bool LastRefreshSkippedUi { get; private set; }
     public DateTimeOffset? LastSavedAt => _store.LastSavedAt;
     public bool LastSaveFailed { get; private set; }
     public bool IsFullscreen => _fullscreen;
@@ -80,9 +90,9 @@ public sealed class AppController : IDisposable
     {
         _events = new WinEventMonitor(); // auf dem UI-Thread (Nachrichtenschleife)
         _events.WindowChanged += OnWindowChanged;
-        _events.ForegroundChanged += _ => _ui.BeginInvoke(CheckFullscreen);
+        _events.ForegroundChanged += _ => RequestFullscreenCheck();
         _events.WindowShown += OnWindowShown;
-        _uiDebouncer = new ChangeDebouncer(TimeSpan.FromMilliseconds(350), TimeSpan.FromMilliseconds(1500), () => _ = RefreshAsync());
+        _uiDebouncer = new ChangeDebouncer(TimeSpan.FromMilliseconds(120), TimeSpan.FromMilliseconds(250), () => _ = RefreshAsync());
         _fullscreenTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
         _fullscreenTimer.Tick += (_, _) => CheckFullscreen();
         _fullscreenTimer.Start();
@@ -171,6 +181,14 @@ public sealed class AppController : IDisposable
         });
     }
 
+    private void RequestFullscreenCheck()
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastFullscreenCheck < MinUiRefreshMs) return;
+        _lastFullscreenCheck = now;
+        _ui.BeginInvoke(CheckFullscreen, DispatcherPriority.Background);
+    }
+
     private void CheckFullscreen()
     {
         bool fs;
@@ -181,6 +199,41 @@ public sealed class AppController : IDisposable
         if (!fs && _refreshPending) _ = RefreshAsync();
     }
 
+    /// <summary>
+    /// Unterdrückt UI-Aktualisierungen während eines Desktop-Wechsels, damit die Karten
+    /// nicht mitten in der Animation neu aufgebaut werden. Nach <paramref name="hold"/>
+    /// wird eine ausstehende Aktualisierung nachgeholt.
+    /// </summary>
+    public IDisposable QuietUi(TimeSpan hold)
+    {
+        Interlocked.Increment(ref _quietUi);
+        return new QuietScope(this, hold);
+    }
+
+    private sealed class QuietScope : IDisposable
+    {
+        private readonly AppController _owner;
+        private readonly TimeSpan _hold;
+        private int _disposed;
+        public QuietScope(AppController owner, TimeSpan hold) { _owner = owner; _hold = hold; }
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            _ = _owner.ReleaseQuietAsync(_hold);
+        }
+    }
+
+    private async Task ReleaseQuietAsync(TimeSpan hold)
+    {
+        try { if (hold > TimeSpan.Zero) await Task.Delay(hold); }
+        catch { }
+        if (Interlocked.Decrement(ref _quietUi) == 0)
+        {
+            _refreshPending = true;
+            if (UiActive && !_fullscreen) SchedulePendingRefresh();
+        }
+    }
+
     // ---------------------------------------------------------------- Live-Zustand
 
     public async Task RefreshAsync()
@@ -188,25 +241,98 @@ public sealed class AppController : IDisposable
         if (Interlocked.Exchange(ref _refreshing, 1) == 1) { _refreshPending = true; return; }
         try
         {
+            if (Volatile.Read(ref _quietUi) > 0)
+            {
+                _refreshPending = true;
+                return;
+            }
+            var wait = _lastRefreshTick == 0 ? 0 : MinUiRefreshMs - (Environment.TickCount64 - _lastRefreshTick);
+            if (wait > 0)
+            {
+                _refreshPending = true;
+                return;
+            }
+
             _refreshPending = false;
+            var previous = Current;
+            var sw = Stopwatch.StartNew();
             var state = await Task.Run(() =>
             {
                 var desktops = _vd.IsAvailable ? _vd.GetDesktops() : Array.Empty<DesktopInfo>();
                 var current = _vd.IsAvailable ? _vd.GetCurrentDesktopId() : null;
                 var excluded = _settings.Current.Exclusions.ProcessNames.Select(AppIdentity.NormalizeProcessName).ToHashSet();
-                var windows = _windows.EnumerateAppWindows().Where(w => !excluded.Contains(AppIdentity.NormalizeProcessName(w.ProcessName))).ToList();
-                foreach (var w in windows) w.DesktopIndex = w.IsPinned ? -1 : desktops.ToList().FindIndex(d => d.Id == w.DesktopId);
+                var windows = _windows.EnumerateAppWindows(detailed: false)
+                    .Where(w => !excluded.Contains(AppIdentity.NormalizeProcessName(w.ProcessName))).ToList();
+                var indexById = new Dictionary<Guid, int>(desktops.Count);
+                for (var i = 0; i < desktops.Count; i++) indexById[desktops[i].Id] = i;
+                foreach (var w in windows)
+                    w.DesktopIndex = w.IsPinned ? -1 : (indexById.TryGetValue(w.DesktopId, out var idx) ? idx : -1);
+
+                if (!UnchangedForUi(previous, desktops, current, windows))
+                {
+                    foreach (var w in windows)
+                        _icons.Prefetch(w.Handle, w.ExecutablePath, w.AppUserModelId);
+                }
                 return new LiveState(desktops, current, windows, DateTimeOffset.Now);
             });
+
+            var skipUi = UnchangedForUi(previous, state.Desktops, state.CurrentDesktopId, state.Windows);
             Current = state;
-            await _ui.InvokeAsync(() => LiveStateChanged?.Invoke());
+            LastRefreshWindowCount = state.Windows.Count;
+            LastRefreshSkippedUi = skipUi;
+            if (!skipUi)
+                await _ui.InvokeAsync(() => LiveStateChanged?.Invoke(), DispatcherPriority.Background);
+            LastRefreshDuration = sw.Elapsed;
+            _lastRefreshTick = Environment.TickCount64;
+            _log.Debug(Src, $"Aktualisierung {LastRefreshDuration.TotalMilliseconds:0} ms, {state.Windows.Count} Fenster{(skipUi ? ", unverändert" : "")}");
         }
         catch (Exception ex) { _log.Warn(Src, "Aktualisierung fehlgeschlagen", ex); }
         finally
         {
             Interlocked.Exchange(ref _refreshing, 0);
-            if (_refreshPending && UiActive && !_fullscreen) _uiDebouncer?.Signal();
+            if (_refreshPending && UiActive && !_fullscreen && Volatile.Read(ref _quietUi) == 0) SchedulePendingRefresh();
         }
+    }
+
+    private void SchedulePendingRefresh()
+    {
+        var wait = MinUiRefreshMs - (Environment.TickCount64 - _lastRefreshTick);
+        if (wait <= 0)
+        {
+            _refreshPending = false;
+            _ = RefreshAsync();
+            return;
+        }
+        var delay = (int)Math.Clamp(wait, 1, MinUiRefreshMs);
+        _ = Task.Delay(delay).ContinueWith(_ =>
+        {
+            if (_refreshPending && UiActive && !_fullscreen)
+            {
+                _refreshPending = false;
+                _ = RefreshAsync();
+            }
+        });
+    }
+
+    private static bool UnchangedForUi(LiveState? previous, IReadOnlyList<DesktopInfo> desktops, Guid? current, IReadOnlyList<WindowRecord> windows)
+    {
+        if (previous is null) return false;
+        if (previous.CurrentDesktopId != current || previous.Desktops.Count != desktops.Count || previous.Windows.Count != windows.Count)
+            return false;
+        for (var i = 0; i < desktops.Count; i++)
+        {
+            var a = previous.Desktops[i]; var b = desktops[i];
+            if (a.Id != b.Id || a.Name != b.Name) return false;
+        }
+        for (var i = 0; i < windows.Count; i++)
+        {
+            var a = previous.Windows[i]; var b = windows[i];
+            if (a.Handle != b.Handle || a.Title != b.Title || a.DesktopId != b.DesktopId
+                || a.State != b.State || a.IsPinned != b.IsPinned || a.ZOrder != b.ZOrder
+                || a.ProcessName != b.ProcessName)
+                return false;
+        }
+        return true;
     }
 
     public void MarkDirty() { if (_refreshPending) _ = RefreshAsync(); }

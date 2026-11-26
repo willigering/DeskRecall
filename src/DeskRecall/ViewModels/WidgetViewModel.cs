@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Media;
 using DeskRecall.Core.Abstractions;
 using DeskRecall.Core.Apps;
-using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
@@ -21,6 +20,8 @@ public sealed class AppRowViewModel : ObservableObject
     private string _title = "";
     private int _windowCount = 1;
     private bool _isWindowsExpanded;
+    private bool _lastRunning, _lastMinimized;
+    private long _lastPrimaryHandle;
 
     public required string AppKey { get; init; }
     public required string AppName { get; init; }
@@ -28,7 +29,7 @@ public sealed class AppRowViewModel : ObservableObject
     public string? AppUserModelId { get; init; }
     public List<WindowRecord> Windows { get; set; } = new();
     public ObservableCollection<WindowRecord> WindowItems { get; } = new();
-    public long PrimaryHandle => Windows.FirstOrDefault()?.Handle ?? 0;
+    public long PrimaryHandle => AppRowInput.MostRecent(Windows)?.Handle ?? 0;
     public bool IsWindowsExpanded
     {
         get => _isWindowsExpanded;
@@ -50,32 +51,29 @@ public sealed class AppRowViewModel : ObservableObject
         : $"{AppName} – {Windows.Count} Fenster\n" + string.Join("\n", Windows.Take(8).Select(w => "• " + w.DisplayTitle));
     public void SyncWindowItems()
     {
+        var listChanged = false;
         for (var i = 0; i < Windows.Count; i++)
         {
-            if (i < WindowItems.Count) WindowItems[i] = Windows[i];
-            else WindowItems.Add(Windows[i]);
+            if (i < WindowItems.Count)
+            {
+                var a = WindowItems[i]; var b = Windows[i];
+                if (a.Handle == b.Handle && a.Title == b.Title && a.State == b.State) continue;
+                WindowItems[i] = b;
+                listChanged = true;
+            }
+            else { WindowItems.Add(Windows[i]); listChanged = true; }
         }
-        while (WindowItems.Count > Windows.Count) WindowItems.RemoveAt(WindowItems.Count - 1);
-        OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsMinimized));
-        OnPropertyChanged(nameof(ToolTipText));
-        OnPropertyChanged(nameof(PrimaryHandle));
+        while (WindowItems.Count > Windows.Count) { WindowItems.RemoveAt(WindowItems.Count - 1); listChanged = true; }
+
+        var running = IsRunning;
+        var minimized = IsMinimized;
+        var handle = PrimaryHandle;
+        if (running != _lastRunning) { _lastRunning = running; OnPropertyChanged(nameof(IsRunning)); }
+        if (minimized != _lastMinimized) { _lastMinimized = minimized; OnPropertyChanged(nameof(IsMinimized)); }
+        if (handle != _lastPrimaryHandle) { _lastPrimaryHandle = handle; OnPropertyChanged(nameof(PrimaryHandle)); }
+        if (listChanged) OnPropertyChanged(nameof(ToolTipText));
         IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(WindowCount, IsWindowsExpanded);
     }
-}
-
-public sealed class ArrangementTileViewModel
-{
-    public required ArrangementWindowTile Tile { get; init; }
-    public ImageSource? Icon { get; init; }
-    public WindowRecord? Window { get; init; }
-    public double Left => Tile.Bounds.Left;
-    public double Top => Tile.Bounds.Top;
-    public double Width => Tile.Bounds.Width;
-    public double Height => Tile.Bounds.Height;
-    public string AppName => Tile.AppName;
-    public long Handle => Tile.Handle;
-    public bool IsMinimized => Tile.IsMinimized;
 }
 
 public sealed class DesktopCardViewModel : ObservableObject
@@ -97,14 +95,20 @@ public sealed class DesktopCardViewModel : ObservableObject
     public bool IsDropTarget { get => _isDropTarget; set => Set(ref _isDropTarget, value); }
     public string EditName { get => _editName; set => Set(ref _editName, value); }
     public ObservableCollection<AppRowViewModel> Apps { get; } = new();
-    public ObservableCollection<ArrangementTileViewModel> PreviewTiles { get; } = new();
-    public ObservableCollection<ArrangementMonitorTile> PreviewMonitors { get; } = new();
     public int AppCount => Apps.Count;
     public bool IsEmpty => Apps.Count == 0;
-    public bool HasArrangement => PreviewTiles.Count > 0;
-    public int PreviewWidth { get; set; } = ArrangementPreview.DefaultWidth;
-    public int PreviewHeight { get; set; } = ArrangementPreview.DefaultHeight;
-    public void NotifyApps() { OnPropertyChanged(nameof(AppCount)); OnPropertyChanged(nameof(IsEmpty)); OnPropertyChanged(nameof(HasArrangement)); OnPropertyChanged(nameof(PreviewWidth)); OnPropertyChanged(nameof(PreviewHeight)); }
+    public bool HasArrangement => Apps.Any(a => a.IsRunning);
+    private int _notifiedAppCount = int.MinValue;
+    private bool _notifiedEmpty = true, _notifiedArrangement;
+    public void NotifyApps()
+    {
+        var count = Apps.Count;
+        var empty = count == 0;
+        var has = Apps.Any(a => a.IsRunning);
+        if (count != _notifiedAppCount) { _notifiedAppCount = count; OnPropertyChanged(nameof(AppCount)); }
+        if (empty != _notifiedEmpty) { _notifiedEmpty = empty; OnPropertyChanged(nameof(IsEmpty)); }
+        if (has != _notifiedArrangement) { _notifiedArrangement = has; OnPropertyChanged(nameof(HasArrangement)); }
+    }
 }
 
 public sealed class HistoryItemViewModel
@@ -135,7 +139,6 @@ public sealed class WidgetViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly IProcessManager _processes;
     private readonly IInstalledAppSource _apps;
-    private readonly IMonitorManager _monitors;
     private readonly HashSet<string> _expandedAppRows = new();
 
     private bool _isExpanded = true;
@@ -145,11 +148,11 @@ public sealed class WidgetViewModel : ObservableObject
 
     public WidgetViewModel(AppController controller, DesktopManager desktops, ISettingsService settings, ISessionStore store,
         IProfileManager profiles, IDialogService dialogs, IconService icons, ILogService log,
-        IProcessManager processes, IInstalledAppSource apps, UpdateController updates, IMonitorManager monitors)
+        IProcessManager processes, IInstalledAppSource apps, UpdateController updates)
     {
         _controller = controller; _desktops = desktops; _settings = settings; _store = store; _profiles = profiles;
         _dialogs = dialogs; _icons = icons; _log = log;
-        _processes = processes; _apps = apps; Updates = updates; _monitors = monitors;
+        _processes = processes; _apps = apps; Updates = updates;
 
         _controller.LiveStateChanged += Rebuild;
         _controller.StatusChanged += () => { OnPropertyChanged(nameof(StatusTime)); OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(IsRestoring)); OnPropertyChanged(nameof(StatusOk)); OnPropertyChanged(nameof(StatusDetail)); };
@@ -174,7 +177,7 @@ public sealed class WidgetViewModel : ObservableObject
         CommitRenameCommand = new AsyncRelayCommand(async p => { if (p is DesktopCardViewModel c) await CommitRenameAsync(c); });
         CancelRenameCommand = new RelayCommand(p => { if (p is DesktopCardViewModel c) c.IsEditing = false; });
         ActivateAppCommand = new AsyncRelayCommand(ActivateOrLaunchAsync);
-        ActivateWindowCommand = new AsyncRelayCommand(async p => { if (p is WindowRecord w) { await _desktops.BringToFrontAsync(w.Handle, w.DesktopId); await _controller.RefreshAsync(); } });
+        ActivateWindowCommand = new AsyncRelayCommand(async p => { if (p is WindowRecord w) await ActivateWindowQuietAsync(w.Handle, w.DesktopId); });
         MinimizeAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) foreach (var w in a.Windows) await _desktops.MinimizeAsync(w.Handle); });
         CloseAppCommand = new AsyncRelayCommand(CloseAppAsync);
         PinAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) { foreach (var w in a.Windows) await _desktops.PinWindowAsync(w.Handle, true); await _controller.RefreshAsync(); } }, _ => _desktops.CanManage);
@@ -278,6 +281,13 @@ public sealed class WidgetViewModel : ObservableObject
         if (state is null) return;
         var collapsed = _settings.Current.Widget.CollapsedCards.ToHashSet();
         var desktops = state.Desktops.Count > 0 ? state.Desktops : new[] { new DesktopInfo { Id = Guid.Empty, Index = 0, Name = "Desktop 1" } };
+        var byDesktop = desktops.ToDictionary(d => d.Id, _ => new List<WindowRecord>());
+        var activeId = state.CurrentDesktopId ?? desktops[0].Id;
+        foreach (var w in state.Windows)
+        {
+            var id = state.Desktops.Count == 0 ? desktops[0].Id : (w.IsPinned ? activeId : w.DesktopId);
+            if (byDesktop.TryGetValue(id, out var list)) list.Add(w);
+        }
 
         // Karten anhand der Desktop-ID abgleichen (Aufklapp-/Bearbeitungszustand bleibt erhalten)
         for (var i = 0; i < desktops.Count; i++)
@@ -296,9 +306,8 @@ public sealed class WidgetViewModel : ObservableObject
             }
             card.Index = i;
             if (!card.IsEditing) card.Name = d.Name;
-            card.IsActive = state.CurrentDesktopId is { } cur ? d.Id == cur : i == 0;
-            var wins = state.Windows.Where(w => state.Desktops.Count == 0 || (w.IsPinned ? card.IsActive : w.DesktopId == d.Id)).ToList(); // angeheftete Fenster beim aktiven Desktop zeigen
-            SyncApps(card, wins);
+            card.IsActive = d.Id == activeId;
+            SyncApps(card, byDesktop[d.Id]);
         }
         while (Cards.Count > desktops.Count) Cards.RemoveAt(Cards.Count - 1);
         OnPropertyChanged(nameof(ActiveCard));
@@ -386,37 +395,8 @@ public sealed class WidgetViewModel : ObservableObject
             else if (at != i) card.Apps.Move(at, i);
         }
         while (card.Apps.Count > ordered.Count) card.Apps.RemoveAt(card.Apps.Count - 1);
-        UpdateArrangement(card, windows);
         card.NotifyApps();
     }
-
-    private void UpdateArrangement(DesktopCardViewModel card, List<WindowRecord> windows)
-    {
-        var pw = Math.Max(160, _settings.Current.Widget.ExpandedWidth - 48);
-        var ph = ArrangementPreview.DefaultHeight;
-        IReadOnlyList<MonitorInfo> monitors;
-        try { monitors = _monitors.GetMonitors(); }
-        catch { monitors = Array.Empty<MonitorInfo>(); }
-        var layout = ArrangementPreview.Layout(windows, monitors, pw, ph);
-        card.PreviewWidth = layout.Width;
-        card.PreviewHeight = layout.Height;
-        card.PreviewMonitors.Clear();
-        foreach (var m in layout.Monitors) card.PreviewMonitors.Add(m);
-        var byKey = card.Apps.ToLookup(a => a.AppKey);
-        card.PreviewTiles.Clear();
-        foreach (var tile in layout.Windows)
-        {
-            var row = byKey[tile.AppKey].FirstOrDefault();
-            var win = row?.Windows.FirstOrDefault(w => w.Handle == tile.Handle) ?? windows.FirstOrDefault(w => w.Handle == tile.Handle);
-            card.PreviewTiles.Add(new ArrangementTileViewModel
-            {
-                Tile = tile,
-                Icon = row?.Icon ?? _icons.ForWindow(tile.Handle, win?.ExecutablePath, win?.AppUserModelId),
-                Window = win,
-            });
-        }
-    }
-
 
     static string AppExpandKey(Guid desktopId, string appKey) => desktopId.ToString("N") + ":" + appKey;
 
@@ -510,9 +490,14 @@ public sealed class WidgetViewModel : ObservableObject
     public async Task ActivateWindowByHandleAsync(long handle)
     {
         var win = Cards.SelectMany(c => c.Apps).SelectMany(a => a.Windows).FirstOrDefault(w => w.Handle == handle);
-        if (win is not null) await _desktops.BringToFrontAsync(win.Handle, win.DesktopId);
-        else await _desktops.BringToFrontAsync(handle, null);
-        await _controller.RefreshAsync();
+        if (win is not null) await ActivateWindowQuietAsync(win.Handle, win.DesktopId);
+        else await ActivateWindowQuietAsync(handle, null);
+    }
+
+    private async Task ActivateWindowQuietAsync(long handle, Guid? desktopId)
+    {
+        using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            await _desktops.BringToFrontAsync(handle, desktopId);
     }
 
     public void PinEntry(InstalledAppEntry entry, DesktopCardViewModel card)
@@ -537,29 +522,30 @@ public sealed class WidgetViewModel : ObservableObject
         if (p is not AppRowViewModel a) return;
         if (a.IsRunning)
         {
-            await _desktops.BringToFrontAsync(a.PrimaryHandle, a.DesktopId);
-            await _controller.RefreshAsync();
+            var handle = AppRowInput.MostRecent(a.Windows)?.Handle ?? a.PrimaryHandle;
+            await ActivateWindowQuietAsync(handle, a.DesktopId);
             return;
         }
         if (!a.IsPinnedEntry) return;
         try
         {
-            if (_desktops.CanManage) await _desktops.SwitchAsync(a.DesktopId);
-            var req = new LaunchRequest(
-                a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
-                a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
-                a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
-                a.AppUserModelId,
-                false,
-                false,
-                a.AppName);
-            // Fix the explorer args – I'll set this properly below
-            var result = _processes.Launch(req);
-            if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
-                _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
-            else
-                await Task.Delay(400);
-            await _controller.RefreshAsync();
+            using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            {
+                if (_desktops.CanManage) await _desktops.SwitchAsync(a.DesktopId);
+                var req = new LaunchRequest(
+                    a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
+                    a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
+                    a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
+                    a.AppUserModelId,
+                    false,
+                    false,
+                    a.AppName);
+                var result = _processes.Launch(req);
+                if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
+                    _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
+                else
+                    await Task.Delay(400);
+            }
         }
         catch (Exception ex)
         {

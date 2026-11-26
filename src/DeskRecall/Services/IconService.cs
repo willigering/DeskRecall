@@ -29,6 +29,20 @@ public sealed class IconService
         return _cache.GetOrAdd(exePath, p => FromFile(p));
     }
 
+    /// <summary>Lädt Symbole im Hintergrund und legt nur erfolgreiche, eingefrorene Bitmaps ab.</summary>
+    public void Prefetch(long hwnd, string? exePath, string? aumidKey = null)
+    {
+        var key = !string.IsNullOrEmpty(exePath) && !exePath.EndsWith("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase)
+            ? exePath : aumidKey ?? ("hwnd:" + hwnd);
+        if (_cache.TryGetValue(key, out var cached) && cached is not null) return;
+        try
+        {
+            var img = FromFile(exePath) ?? FromWindow(hwnd);
+            if (img is not null) _cache[key] = img;
+        }
+        catch { }
+    }
+
     private static ImageSource? FromFile(string? path)
     {
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
