@@ -95,6 +95,7 @@ public partial class App : Application
             _mutex?.Dispose();
             _mutex = null;
         };
+        updates.CanPromptNow = () => !(_controller?.IsRestoring ?? false) && !(_controller?.IsFullscreen ?? false);
         updates.ShutdownApp = () => Dispatcher.BeginInvoke(() => Shutdown());
         updates.TrayNotice += (title, text) => _tray?.ShowBalloon(title, text);
         updates.Start(e.Args);

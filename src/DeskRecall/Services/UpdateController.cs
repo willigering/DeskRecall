@@ -33,6 +33,8 @@ public sealed class UpdateController : ObservableObject, IDisposable
     private ReleaseInfo? _available;
     private string? _balloonedVersion;
     private bool _skipNextAuto;
+    private string? _promptedVersion;
+    private bool _offerPrompt;
 
     public UpdateController(ISettingsService settings, ILogService log, IDialogService dialogs)
     {
@@ -59,6 +61,8 @@ public sealed class UpdateController : ObservableObject, IDisposable
     public Action? PrepareRelaunch { get; set; }
     /// <summary>Beendet die laufende Instanz nach erfolgreichem Start der neuen exe.</summary>
     public Action? ShutdownApp { get; set; }
+    /// <summary>Liefert false, solange ein Update-Fenster stören würde (Wiederherstellung läuft, Vollbild).</summary>
+    public Func<bool>? CanPromptNow { get; set; }
     /// <summary>Ruhiger Hinweis im Infobereich (einmal je Version).</summary>
     public event Action<string, string>? TrayNotice;
 
@@ -173,6 +177,7 @@ public sealed class UpdateController : ObservableObject, IDisposable
             SetAvailable(release);
             SetStatus($"Version {UpdateService.Display(release.Version)} ist verfügbar.");
             _log.Info(Src, $"Neue Version {UpdateService.Display(release.Version)} gefunden (lokal {UpdateService.Display(local ?? new Version(0, 0, 0))}, Kanal {channel}).");
+            _offerPrompt = true;
             if (!manual && _balloonedVersion != UpdateService.Display(release.Version))
             {
                 _balloonedVersion = UpdateService.Display(release.Version);
@@ -181,6 +186,32 @@ public sealed class UpdateController : ObservableObject, IDisposable
             }
         }
         finally { SetBusy(false); }
+
+        if (_offerPrompt)
+        {
+            _offerPrompt = false;
+            await OfferUpdateAsync(manual);
+        }
+    }
+
+    /// <summary>Fragt per Fenster, ob jetzt aktualisiert werden soll – je Version einmal pro Programmstart (bei manueller Suche immer).</summary>
+    async Task OfferUpdateAsync(bool manual)
+    {
+        var r = _available;
+        if (r is null) return;
+        var v = UpdateService.Display(r.Version);
+        if (!manual && _promptedVersion == v) return;
+        _promptedVersion = v;
+
+        // Nicht mitten in der Wiederherstellung oder im Vollbild stören (bis zu 5 Minuten warten).
+        for (var i = 0; i < 60 && CanPromptNow?.Invoke() == false; i++) await Task.Delay(5000);
+        if (_available is null || _busy) return;
+
+        var local = UpdateService.Display(LocalVersion ?? new Version(0, 0, 0));
+        var yes = _dialogs.Confirm("Update verfügbar",
+            $"DeskRecall {v} ist verfügbar (installiert: {local}).\n\nJetzt aktualisieren? DeskRecall startet dabei neu, Ihre Sitzungsdaten bleiben erhalten.",
+            "Jetzt aktualisieren", "Später");
+        if (yes) await InstallAsync();
     }
 
     async Task InstallAsync()

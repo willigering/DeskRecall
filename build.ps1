@@ -18,7 +18,7 @@ $numberFile = Join-Path $PSScriptRoot "build-number.txt"
 $build = [int]((Get-Content $numberFile -ErrorAction SilentlyContinue) -as [int])
 if ($build -lt 1) { $build = 0 }
 if (-not $NoIncrement) { $build++; Set-Content -Path $numberFile -Value $build -NoNewline }
-Write-Host "DeskRecall 1.2.4 – Build $build" -ForegroundColor Magenta
+Write-Host "DeskRecall 1.2.5 – Build $build" -ForegroundColor Magenta
 
 dotnet build DeskRecall.sln -c $Configuration -p:BuildNumber=$build
 if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen" }
