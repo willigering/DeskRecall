@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows.Media;
 using DeskRecall.Core.Browsers;
 using DeskRecall.Core.Models;
 
@@ -11,6 +12,10 @@ public sealed class WindowItemViewModel : ObservableObject
     private bool _showHeader, _isTabsExpanded;
 
     public WindowItemViewModel(WindowRecord record) { _record = record; }
+
+    private ImageSource? _icon;
+    /// <summary>Programmsymbol (z. B. Firefox) für die Tab-Zeilen.</summary>
+    public ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
 
     public WindowRecord Record => _record;
     public long Handle => _record.Handle;

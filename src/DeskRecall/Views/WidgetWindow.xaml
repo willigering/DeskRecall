@@ -23,16 +23,18 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <Ellipse x:Name="SelDot" Width="4" Height="4" Margin="0,0,6,0" VerticalAlignment="Center" Fill="{StaticResource AccentLightBrush}" Visibility="Hidden" />
-                    <TextBlock x:Name="TabLabel" Grid.Column="1" Text="{Binding DisplayTitle}" TextTrimming="CharacterEllipsis" FontSize="11" VerticalAlignment="Center"
+                    <Image Grid.Column="1" Source="{Binding Window.Icon}" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <TextBlock x:Name="TabLabel" Grid.Column="2" Text="{Binding DisplayTitle}" TextTrimming="CharacterEllipsis" FontSize="11" VerticalAlignment="Center"
                                Foreground="{StaticResource TextFaintBrush}" Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisInv}}" />
-                    <TextBox x:Name="TabRenameBox" Grid.Column="1" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" Padding="3,1" FontSize="11"
+                    <TextBox x:Name="TabRenameBox" Grid.Column="2" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" Padding="3,1" FontSize="11"
                              Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" MaxLength="80"
                              IsVisibleChanged="TabRenameBox_IsVisibleChanged" KeyDown="TabRenameBox_KeyDown" LostKeyboardFocus="TabRenameBox_LostKeyboardFocus" />
-                    <TextBlock x:Name="AliasGlyph" Grid.Column="2" Text="&#xE70F;" Style="{StaticResource IconText}" FontSize="9" Margin="5,0,0,0"
+                    <TextBlock x:Name="AliasGlyph" Grid.Column="3" Text="&#xE70F;" Style="{StaticResource IconText}" FontSize="9" Margin="5,0,0,0"
                                Foreground="{StaticResource TextFaintBrush}" Visibility="Collapsed" ToolTip="Eigener Name (nur in DeskRecall)" />
                 </Grid>
             </Border>

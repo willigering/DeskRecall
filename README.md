@@ -2,13 +2,13 @@
 
 **Desktop- und Sitzungsmanager für Windows 11** – speichert Ihre Arbeitsumgebung (Programme, virtuelle Desktops, Fensterpositionen, Monitore, Explorer-Ordner) und stellt sie nach einem Neustart automatisch wieder her.
 
-Version 1.2.7 · © 2026 Willi Gering, Gering Digital
+Version 1.2.8 · © 2026 Willi Gering, Gering Digital
 
 ---
 
 ## Schnellstart
 
-1. **Portable Version:** `DeskRecall-1.2.7-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
+1. **Portable Version:** `DeskRecall-1.2.8-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
    Die Datei `portable.flag` neben der EXE sorgt dafür, dass alle Daten im Unterordner `Daten` liegen. Löschen Sie sie, wenn die Daten stattdessen unter `%LOCALAPPDATA%\DeskRecall` liegen sollen.
 2. Beim ersten Start trägt sich DeskRecall in den Autostart ein (`HKCU\…\Run`, ohne Administratorrechte – abschaltbar unter *Einstellungen → Allgemein*).
 3. Arbeiten Sie normal. DeskRecall sichert automatisch bei jeder Änderung (und zusätzlich alle 2 Minuten als Sicherheitsnetz).

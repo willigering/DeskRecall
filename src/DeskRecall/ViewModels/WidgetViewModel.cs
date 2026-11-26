@@ -50,7 +50,7 @@ public sealed class AppRowViewModel : ObservableObject
     }
     public bool IsRunning => !IsSessionClosed && Windows.Count > 0 && PrimaryHandle != 0;
 
-    public ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
+    public ImageSource? Icon { get => _icon; set { if (Set(ref _icon, value)) foreach (var w in WindowItems) w.Icon = value; } }
     public string Title { get => _title; set => Set(ref _title, value); }
     public int WindowCount { get => _windowCount; set { if (Set(ref _windowCount, value)) NotifyExpandable(); } }
     /// <summary>Tabs, wenn genau ein Browserfenster da ist (sonst stehen die Tabs unter den Fensterzeilen).</summary>
@@ -98,7 +98,7 @@ public sealed class AppRowViewModel : ObservableObject
         }
         while (WindowItems.Count > Windows.Count) { WindowItems.RemoveAt(WindowItems.Count - 1); listChanged = true; }
         var multi = WindowItems.Count > 1;
-        foreach (var item in WindowItems) item.ShowHeader = multi;
+        foreach (var item in WindowItems) { item.ShowHeader = multi; item.Icon = _icon; }
 
         var running = IsRunning;
         var minimized = IsMinimized;
