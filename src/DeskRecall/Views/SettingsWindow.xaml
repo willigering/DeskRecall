@@ -75,7 +75,8 @@
                             <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CheckUpdates}">
                                 <StackPanel>
                                     <TextBlock Text="Automatisch nach Updates suchen" />
-                                    <TextBlock Text="Beim Start und etwa alle sechs Stunden. Es wird kein Zugriffstoken gesendet; der Feed muss öffentlich erreichbar sein." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                    <TextBlock TextWrapping="Wrap" Style="{StaticResource DimText}" Margin="0,2,0,0"
+                                               Text="Beim Start und etwa alle sechs Stunden wird api.github.com gefragt, ob eine neue Version vorliegt. Dabei wird typischerweise Ihre IP-Adresse an GitHub übermittelt, es werden keine Sitzungsdaten gesendet. Ohne dieses Häkchen bleibt DeskRecall offline. Es wird kein Zugriffstoken verwendet." />
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -194,7 +195,10 @@
                                 </StackPanel>
                             </CheckBox>
                         </Border>
-                        <TextBlock Text="{Binding VersionText}" Style="{StaticResource DimText}" Margin="0,18,0,0" Foreground="{StaticResource TextFaintBrush}" />
+                        <TextBlock Style="{StaticResource DimText}" Margin="0,18,0,0" Foreground="{StaticResource TextFaintBrush}">
+                            <Run Text="{Binding VersionText, Mode=OneWay}" />
+                            <Run Text="  ·  Lizenz und Hinweise unter Info" />
+                        </TextBlock>
                     </StackPanel>
                 </ScrollViewer>
                 <!-- ===== Sicherung ===== -->
@@ -812,6 +816,33 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
                         </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <!-- ===== Info ===== -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding SelectedPage.Key, Converter={StaticResource KeyVis}, ConverterParameter=info}">
+                    <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
+                        <TextBlock Text="Info" Style="{StaticResource HeaderText}" />
+                        <TextBlock Text="Version, Lizenz und ein kurzer Hinweis zum Datenschutz." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding VersionText}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding CopyrightText}" Margin="0,4,0,0" />
+                                <TextBlock TextWrapping="Wrap" Margin="0,12,0,0" Style="{StaticResource DimText}">
+                                    <Run Text="DeskRecall ist kostenlos und ohne Gewähr. Eine Haftung besteht nur bei Vorsatz und grober Fahrlässigkeit." />
+                                </TextBlock>
+                                <TextBlock Margin="0,12,0,0">
+                                    <Hyperlink Command="{Binding OpenLicenseCommand}" Foreground="{StaticResource AccentLightBrush}">Lizenz öffnen</Hyperlink>
+                                    <Run Text="  ·  " />
+                                    <Hyperlink Command="{Binding OpenNoticesCommand}" Foreground="{StaticResource AccentLightBrush}">Hinweise zu Komponenten Dritter</Hyperlink>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Datenschutz" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource DimText}" LineHeight="20"
+                                       Text="Alle Sitzungs- und Einstellungsdaten bleiben lokal auf diesem Rechner. Es gibt keine Telemetrie. Die einzige Netzwerkverbindung ist die optionale Update-Prüfung gegen api.github.com; dabei wird typischerweise Ihre IP-Adresse an GitHub übermittelt. Die Prüfung können Sie unter Allgemein abschalten." />
+                        </Border>
+                        <TextBlock Text="Windows ist eine Marke der Microsoft Corporation." Style="{StaticResource DimText}" Margin="4,8,0,0" />
                     </StackPanel>
                 </ScrollViewer>
         </Grid>

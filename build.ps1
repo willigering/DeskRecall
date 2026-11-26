@@ -41,6 +41,7 @@ if ($LASTEXITCODE -ne 0) { throw "Publish (portabel) fehlgeschlagen" }
 # portable.flag: Daten werden neben der EXE im Ordner „Daten“ gespeichert
 Set-Content -Path "$out/DeskRecall-portable-win-x64/portable.flag" -Value "Daten im Unterordner 'Daten' speichern. Datei löschen, um %LOCALAPPDATA%\DeskRecall zu verwenden."
 Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md "$out/DeskRecall-portable-win-x64/"
+Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md "$out/DeskRecall-win-x64/"
 
 if ($Installer) {
     $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue

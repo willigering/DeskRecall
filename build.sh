@@ -20,4 +20,5 @@ dotnet publish "$APP" -c "$CONFIG" -r win-x64 --self-contained true -p:PublishSi
   -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:BuildNumber="$BUILD" -o publish/DeskRecall-portable-win-x64
 printf '%s\r\n' "Daten im Unterordner 'Daten' speichern. Datei loeschen, um %LOCALAPPDATA%\\DeskRecall zu verwenden." > publish/DeskRecall-portable-win-x64/portable.flag
 cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-portable-win-x64/
+cp README.md LICENSE THIRD-PARTY-NOTICES.md publish/DeskRecall-win-x64/
 echo "Fertig: $(pwd)/publish"
