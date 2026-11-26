@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Media;
 using DeskRecall.Core.Abstractions;
 using DeskRecall.Core.Apps;
-using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
@@ -64,20 +63,6 @@ public sealed class AppRowViewModel : ObservableObject
     }
 }
 
-public sealed class ArrangementTileViewModel
-{
-    public required ArrangementWindowTile Tile { get; init; }
-    public ImageSource? Icon { get; init; }
-    public WindowRecord? Window { get; init; }
-    public double Left => Tile.Bounds.Left;
-    public double Top => Tile.Bounds.Top;
-    public double Width => Tile.Bounds.Width;
-    public double Height => Tile.Bounds.Height;
-    public string AppName => Tile.AppName;
-    public long Handle => Tile.Handle;
-    public bool IsMinimized => Tile.IsMinimized;
-}
-
 public sealed class DesktopCardViewModel : ObservableObject
 {
     private string _name = "";
@@ -97,14 +82,10 @@ public sealed class DesktopCardViewModel : ObservableObject
     public bool IsDropTarget { get => _isDropTarget; set => Set(ref _isDropTarget, value); }
     public string EditName { get => _editName; set => Set(ref _editName, value); }
     public ObservableCollection<AppRowViewModel> Apps { get; } = new();
-    public ObservableCollection<ArrangementTileViewModel> PreviewTiles { get; } = new();
-    public ObservableCollection<ArrangementMonitorTile> PreviewMonitors { get; } = new();
     public int AppCount => Apps.Count;
     public bool IsEmpty => Apps.Count == 0;
-    public bool HasArrangement => PreviewTiles.Count > 0;
-    public int PreviewWidth { get; set; } = ArrangementPreview.DefaultWidth;
-    public int PreviewHeight { get; set; } = ArrangementPreview.DefaultHeight;
-    public void NotifyApps() { OnPropertyChanged(nameof(AppCount)); OnPropertyChanged(nameof(IsEmpty)); OnPropertyChanged(nameof(HasArrangement)); OnPropertyChanged(nameof(PreviewWidth)); OnPropertyChanged(nameof(PreviewHeight)); }
+    public bool HasArrangement => Apps.Any(a => a.IsRunning);
+    public void NotifyApps() { OnPropertyChanged(nameof(AppCount)); OnPropertyChanged(nameof(IsEmpty)); OnPropertyChanged(nameof(HasArrangement)); }
 }
 
 public sealed class HistoryItemViewModel
@@ -135,7 +116,6 @@ public sealed class WidgetViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly IProcessManager _processes;
     private readonly IInstalledAppSource _apps;
-    private readonly IMonitorManager _monitors;
     private readonly HashSet<string> _expandedAppRows = new();
 
     private bool _isExpanded = true;
@@ -145,11 +125,11 @@ public sealed class WidgetViewModel : ObservableObject
 
     public WidgetViewModel(AppController controller, DesktopManager desktops, ISettingsService settings, ISessionStore store,
         IProfileManager profiles, IDialogService dialogs, IconService icons, ILogService log,
-        IProcessManager processes, IInstalledAppSource apps, UpdateController updates, IMonitorManager monitors)
+        IProcessManager processes, IInstalledAppSource apps, UpdateController updates)
     {
         _controller = controller; _desktops = desktops; _settings = settings; _store = store; _profiles = profiles;
         _dialogs = dialogs; _icons = icons; _log = log;
-        _processes = processes; _apps = apps; Updates = updates; _monitors = monitors;
+        _processes = processes; _apps = apps; Updates = updates;
 
         _controller.LiveStateChanged += Rebuild;
         _controller.StatusChanged += () => { OnPropertyChanged(nameof(StatusTime)); OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(IsRestoring)); OnPropertyChanged(nameof(StatusOk)); OnPropertyChanged(nameof(StatusDetail)); };
@@ -386,37 +366,8 @@ public sealed class WidgetViewModel : ObservableObject
             else if (at != i) card.Apps.Move(at, i);
         }
         while (card.Apps.Count > ordered.Count) card.Apps.RemoveAt(card.Apps.Count - 1);
-        UpdateArrangement(card, windows);
         card.NotifyApps();
     }
-
-    private void UpdateArrangement(DesktopCardViewModel card, List<WindowRecord> windows)
-    {
-        var pw = Math.Max(160, _settings.Current.Widget.ExpandedWidth - 48);
-        var ph = ArrangementPreview.DefaultHeight;
-        IReadOnlyList<MonitorInfo> monitors;
-        try { monitors = _monitors.GetMonitors(); }
-        catch { monitors = Array.Empty<MonitorInfo>(); }
-        var layout = ArrangementPreview.Layout(windows, monitors, pw, ph);
-        card.PreviewWidth = layout.Width;
-        card.PreviewHeight = layout.Height;
-        card.PreviewMonitors.Clear();
-        foreach (var m in layout.Monitors) card.PreviewMonitors.Add(m);
-        var byKey = card.Apps.ToLookup(a => a.AppKey);
-        card.PreviewTiles.Clear();
-        foreach (var tile in layout.Windows)
-        {
-            var row = byKey[tile.AppKey].FirstOrDefault();
-            var win = row?.Windows.FirstOrDefault(w => w.Handle == tile.Handle) ?? windows.FirstOrDefault(w => w.Handle == tile.Handle);
-            card.PreviewTiles.Add(new ArrangementTileViewModel
-            {
-                Tile = tile,
-                Icon = row?.Icon ?? _icons.ForWindow(tile.Handle, win?.ExecutablePath, win?.AppUserModelId),
-                Window = win,
-            });
-        }
-    }
-
 
     static string AppExpandKey(Guid desktopId, string appKey) => desktopId.ToString("N") + ":" + appKey;
 

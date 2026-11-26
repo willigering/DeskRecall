@@ -5,7 +5,6 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Settings;
 using DeskRecall.Services;
@@ -647,15 +646,6 @@ public partial class WidgetWindow : Window
         return list;
     }
 
-    private void ArrangementTile_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (Ctx<ArrangementTileViewModel>(sender) is { } tile)
-        {
-            if (tile.Window is { } w) _vm.ActivateWindowCommand.Execute(w);
-            else if (tile.Handle != 0) _ = _vm.ActivateWindowByHandleAsync(tile.Handle);
-            e.Handled = true;
-        }
-    }
 
     // ------------------------------------------------------------ Umbenennen (braucht kurzzeitig Tastatur)
 

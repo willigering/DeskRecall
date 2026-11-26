@@ -50,11 +50,13 @@
                         <TextBlock x:Name="WinGlyph" Grid.Column="4" Text="&#xE8A7;" Style="{StaticResource IconText}" FontSize="12" Foreground="{StaticResource TextFaintBrush}" ToolTip="Fenster in den Vordergrund holen" />
                     </Grid>
                 </Border>
-                <Border x:Name="SubHost" Margin="27,0,0,2" ClipToBounds="True" ui:ExpandChrome.IsOpen="{Binding IsWindowsExpanded}">
+                <Border x:Name="SubHost" Margin="27,0,0,0" ClipToBounds="True"
+                        MaxHeight="0" Opacity="0" Visibility="Collapsed"
+                        ui:ExpandChrome.IsOpen="{Binding IsWindowsExpanded}">
                     <ItemsControl ItemsSource="{Binding WindowItems}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type m:WindowRecord}">
-                                <Border x:Name="SubRow" Background="Transparent" CornerRadius="4" Padding="6,3" Margin="0,1" Cursor="Hand"
+                                <Border x:Name="SubRow" Background="Transparent" CornerRadius="4" Padding="6,2" Margin="0,0" Cursor="Hand"
                                         ToolTip="{Binding DisplayTitle}" ToolTipService.InitialShowDelay="500"
                                         MouseLeftButtonUp="WindowSubRow_MouseLeftButtonUp">
                                     <TextBlock Text="{Binding DisplayTitle}" TextTrimming="CharacterEllipsis" FontSize="11.5"
@@ -126,66 +128,16 @@
                                 ToolTip="Ein-/Ausklappen" />
                     </Grid>
                     <StackPanel Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
-                        <Border x:Name="ArrangementMap" Width="{Binding PreviewWidth}" Height="{Binding PreviewHeight}" HorizontalAlignment="Left" CornerRadius="6" Background="#14000000"
-                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Margin="0,0,0,8" ClipToBounds="True"
-                                Visibility="{Binding HasArrangement, Converter={StaticResource BoolToVis}}"
-                                ToolTip="Fensteranordnung auf den Monitoren">
-                            <Grid>
-                                <ItemsControl ItemsSource="{Binding PreviewMonitors}" IsHitTestVisible="False">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Canvas />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemContainerStyle>
-                                        <Style TargetType="ContentPresenter">
-                                            <Setter Property="Canvas.Left" Value="{Binding Bounds.Left}" />
-                                            <Setter Property="Canvas.Top" Value="{Binding Bounds.Top}" />
-                                        </Style>
-                                    </ItemsControl.ItemContainerStyle>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Width="{Binding Bounds.Width}" Height="{Binding Bounds.Height}"
-                                                    Background="#18FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <ItemsControl ItemsSource="{Binding PreviewTiles}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Canvas />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemContainerStyle>
-                                        <Style TargetType="ContentPresenter">
-                                            <Setter Property="Canvas.Left" Value="{Binding Left}" />
-                                            <Setter Property="Canvas.Top" Value="{Binding Top}" />
-                                        </Style>
-                                    </ItemsControl.ItemContainerStyle>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:ArrangementTileViewModel}">
-                                            <Border Width="{Binding Width}" Height="{Binding Height}" CornerRadius="3"
-                                                    Background="#CC2A2640" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"
-                                                    Cursor="Hand" ToolTip="{Binding AppName}"
-                                                    MouseLeftButtonUp="ArrangementTile_MouseLeftButtonUp">
-                                                <Image Source="{Binding Icon}" Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                       RenderOptions.BitmapScalingMode="HighQuality" />
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Grid>
-                        </Border>
                         <ItemsControl ItemsSource="{Binding Apps}" ItemTemplate="{StaticResource AppRowTemplate}" />
-                        <TextBlock Text="Keine Fenster – Programm hinzufügen oder hierher ziehen" FontSize="11.5" Foreground="{StaticResource TextFaintBrush}" Margin="6,2,0,2"
+                        <TextBlock Text="Keine Fenster – Programm hinzufügen oder hierher ziehen" FontSize="11.5" Foreground="{StaticResource TextFaintBrush}" Margin="6,2,0,0"
                                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
-                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="2,4,0,0" Padding="2,2"
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left" Margin="4,2,0,0" Padding="2,1"
+                                Opacity="0.75"
                                 Command="{Binding DataContext.AddAppCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" ToolTip="Programm auf diesem Desktop anheften">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE710;" Style="{StaticResource IconText}" FontSize="11" Margin="0,0,6,0" />
-                                <TextBlock Text="Programm hinzufügen" FontSize="11.5" Foreground="{StaticResource TextFaintBrush}" />
-                            </StackPanel>
+                            <TextBlock FontSize="11" Foreground="{StaticResource TextFaintBrush}">
+                                <Run Text="+" /><Run Text="  Programm hinzufügen" />
+                            </TextBlock>
                         </Button>
                     </StackPanel>
                 </StackPanel>

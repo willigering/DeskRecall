@@ -15,15 +15,16 @@ public static class ExpandChrome
     static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not FrameworkElement el) return;
+        HookLoaded(el);
         var open = (bool)e.NewValue;
-        if (!el.IsLoaded)
-        {
-            el.Loaded -= OnLoaded;
-            el.Loaded += OnLoaded;
-            ApplyInstant(el, open);
-            return;
-        }
+        if (!el.IsLoaded) { ApplyInstant(el, open); return; }
         Animate(el, open);
+    }
+
+    static void HookLoaded(FrameworkElement el)
+    {
+        el.Loaded -= OnLoaded;
+        el.Loaded += OnLoaded;
     }
 
     static void OnLoaded(object sender, RoutedEventArgs e)
@@ -58,48 +59,37 @@ public static class ExpandChrome
         el.Visibility = Visibility.Visible;
 
         double fromH, toH, fromO, toO;
-        Action? done;
         if (open)
         {
             el.MaxHeight = double.PositiveInfinity;
+            el.Opacity = 1;
             el.UpdateLayout();
             var width = el.ActualWidth > 1 ? el.ActualWidth : 400;
             el.Measure(new Size(width, double.PositiveInfinity));
             toH = Math.Max(el.DesiredSize.Height, 1);
-            el.MaxHeight = 0;
             fromH = 0;
             fromO = 0;
             toO = 1;
-            done = () =>
-            {
-                el.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-                el.MaxHeight = double.PositiveInfinity;
-            };
+            // Lokale Werte = Endzustand, damit FillBehavior.Stop nicht auf 0 zurückspringt.
+            el.MaxHeight = double.PositiveInfinity;
+            el.Opacity = 1;
         }
         else
         {
             fromH = el.ActualHeight > 0 ? el.ActualHeight : el.DesiredSize.Height;
             if (fromH <= 0) { ApplyInstant(el, false); return; }
             toH = 0;
-            fromO = el.Opacity;
+            fromO = el.Opacity > 0 ? el.Opacity : 1;
             toO = 0;
-            done = () =>
-            {
-                el.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-                el.BeginAnimation(UIElement.OpacityProperty, null);
-                el.MaxHeight = 0;
-                el.Opacity = 0;
-                el.Visibility = Visibility.Collapsed;
-            };
+            el.MaxHeight = 0;
+            el.Opacity = 0;
         }
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(180);
         var hAnim = new DoubleAnimation(fromH, toH, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
         var oAnim = new DoubleAnimation(fromO, toO, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
-        hAnim.Completed += (_, _) => done();
-        el.MaxHeight = fromH;
-        el.Opacity = fromO;
+        hAnim.Completed += (_, _) => ApplyInstant(el, open);
         el.BeginAnimation(FrameworkElement.MaxHeightProperty, hAnim);
         el.BeginAnimation(UIElement.OpacityProperty, oAnim);
     }

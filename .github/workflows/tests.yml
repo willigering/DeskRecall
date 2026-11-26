@@ -20,4 +20,4 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Tests ausführen
-        run: dotnet test tests/DeskRecall.Core.Tests/DeskRecall.Core.Tests.csproj -c Release -p:BuildNumber=2 --nologo
+        run: dotnet test tests/DeskRecall.Core.Tests/DeskRecall.Core.Tests.csproj -c Release --nologo
