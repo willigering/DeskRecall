@@ -11,6 +11,7 @@ using DeskRecall.Core.Profiles;
 using DeskRecall.Core.Restore;
 using DeskRecall.Core.Rules;
 using DeskRecall.Core.Settings;
+using DeskRecall.Core.Session;
 using DeskRecall.Core.Storage;
 using DeskRecall.Services;
 
@@ -28,8 +29,9 @@ public sealed class AppRowViewModel : ObservableObject
 
     public required string AppKey { get; init; }
     public required string AppName { get; init; }
-    public string? ExecutablePath { get; init; }
-    public string? AppUserModelId { get; init; }
+    public string? ExecutablePath { get; set; }
+    public string? AppUserModelId { get; set; }
+    private bool _sessionClosed;
     public List<WindowRecord> Windows { get; set; } = new();
     public ObservableCollection<WindowItemViewModel> WindowItems { get; } = new();
     public long PrimaryHandle => AppRowInput.MostRecent(Windows)?.Handle ?? 0;
@@ -41,7 +43,12 @@ public sealed class AppRowViewModel : ObservableObject
     public Guid DesktopId { get; init; }
     public bool IsPinnedEntry { get; set; }
     public Guid? PinRuleId { get; set; }
-    public bool IsRunning => Windows.Count > 0 && PrimaryHandle != 0;
+    public bool IsSessionClosed
+    {
+        get => _sessionClosed;
+        set { if (Set(ref _sessionClosed, value)) { OnPropertyChanged(nameof(IsRunning)); OnPropertyChanged(nameof(ToolTipText)); } }
+    }
+    public bool IsRunning => !IsSessionClosed && Windows.Count > 0 && PrimaryHandle != 0;
 
     public ImageSource? Icon { get => _icon; set => Set(ref _icon, value); }
     public string Title { get => _title; set => Set(ref _title, value); }
@@ -54,7 +61,8 @@ public sealed class AppRowViewModel : ObservableObject
     public string BadgeToolTip => WindowCount > 1 ? $"{WindowCount} Fenster – auf- oder zuklappen" : $"{TabCount} Tabs – auf- oder zuklappen";
     public bool IsMinimized => IsRunning && Windows.All(w => w.State == WindowShowState.Minimized);
     public string ToolTipText =>
-        IsPinnedEntry && !IsRunning ? $"{AppName}\nAngepinnt – klicken zum Starten auf diesem Desktop"
+        IsSessionClosed ? $"{AppName}\nIn dieser Sitzung geschlossen – beim nächsten Systemstart wieder da"
+        : IsPinnedEntry && !IsRunning ? $"{AppName}\nAngepinnt – klicken zum Starten auf diesem Desktop"
         : Windows.Count <= 1 ? $"{AppName}\n{Title}"
         : $"{AppName} – {Windows.Count} Fenster\n" + string.Join("\n", Windows.Take(8).Select(w => "• " + w.DisplayTitle));
 
@@ -193,7 +201,7 @@ public sealed class WidgetViewModel : ObservableObject
         _controller.StatusChanged += () => { OnPropertyChanged(nameof(StatusTime)); OnPropertyChanged(nameof(StatusText)); OnPropertyChanged(nameof(IsRestoring)); OnPropertyChanged(nameof(StatusOk)); OnPropertyChanged(nameof(StatusDetail)); };
         _store.HistoryChanged += () => Application.Current.Dispatcher.BeginInvoke(LoadHistory);
         _profiles.Changed += () => Application.Current.Dispatcher.BeginInvoke(LoadProfiles);
-        _settings.Changed += _ => Application.Current.Dispatcher.BeginInvoke(() => { OnPropertyChanged(nameof(IsPinned)); Rebuild(); });
+        _settings.Changed += _ => Application.Current.Dispatcher.BeginInvoke(() => { OnPropertyChanged(nameof(IsPinned)); OnPropertyChanged(nameof(StartupHint)); Rebuild(); });
 
         _selectedProfile = _settings.Current.ActiveProfile;
         LoadProfiles();
@@ -225,6 +233,7 @@ public sealed class WidgetViewModel : ObservableObject
         ResetTabAliasCommand = new RelayCommand(p => { if (p is TabRowViewModel t) ResetTabAlias(t); });
         MinimizeAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) foreach (var w in a.Windows) await _desktops.MinimizeAsync(w.Handle); });
         CloseAppCommand = new AsyncRelayCommand(CloseAppAsync);
+        SnapshotCommand = new AsyncRelayCommand(() => _controller.TakeSnapshotAsync(), () => !_controller.IsRestoring);
         PinAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) { foreach (var w in a.Windows) await _desktops.PinWindowAsync(w.Handle, true); await _controller.RefreshAsync(); } }, _ => _desktops.CanManage);
         RestoreCommand = new AsyncRelayCommand(RestoreAsync, () => !_controller.IsRestoring);
         SaveCommand = new AsyncRelayCommand(SaveAsync);
@@ -321,6 +330,17 @@ public sealed class WidgetViewModel : ObservableObject
     public bool IsEditingAnyTab => AllTabs().Any(t => t.IsEditing);
     public AsyncRelayCommand MinimizeAppCommand { get; }
     public AsyncRelayCommand CloseAppCommand { get; }
+    public AsyncRelayCommand SnapshotCommand { get; }
+    public string StartupHint
+    {
+        get
+        {
+            var name = _settings.Current.Restore.StartupProfile;
+            return string.IsNullOrWhiteSpace(name)
+                ? "Beim Systemstart wird die letzte Sitzung geladen."
+                : $"Beim Systemstart wird „{name}“ geladen.";
+        }
+    }
     public AsyncRelayCommand PinAppCommand { get; }
     public AsyncRelayCommand RestoreCommand { get; }
     public AsyncRelayCommand SaveCommand { get; }
@@ -389,10 +409,14 @@ public sealed class WidgetViewModel : ObservableObject
                     AppKey = first.AppKey,
                     AppName = AppCatalog.FriendlyName(first.ProcessName) ?? first.FriendlyName,
                     ExecutablePath = first.ExecutablePath,
+                    AppUserModelId = first.AppUserModelId,
                     DesktopId = card.Id,
                 };
                 row.Icon = _icons.ForWindow(first.Handle, first.ExecutablePath, first.AppUserModelId);
             }
+            row.IsSessionClosed = false;
+            row.ExecutablePath ??= first.ExecutablePath;
+            row.AppUserModelId ??= first.AppUserModelId;
             row.Windows = g;
             row.Title = string.IsNullOrWhiteSpace(first.Title) ? row.AppName : first.Title;
             row.WindowCount = g.Count;
@@ -400,6 +424,33 @@ public sealed class WidgetViewModel : ObservableObject
             row.SyncWindowItems();
             SyncTabs(row);
             ApplyExpandedState(row, card.Id);
+            result.Add(row);
+        }
+        foreach (var closed in _controller.Closures.ForDesktop(card.Id, card.Index))
+        {
+            if (result.Any(r => r.AppKey == closed.AppKey)) continue;
+            if (!existing.TryGetValue(closed.AppKey, out var row) || !row.IsSessionClosed)
+            {
+                row = new AppRowViewModel
+                {
+                    AppKey = closed.AppKey,
+                    AppName = closed.AppName,
+                    ExecutablePath = closed.ExecutablePath,
+                    AppUserModelId = closed.AppUserModelId,
+                    DesktopId = card.Id,
+                    IsSessionClosed = true,
+                };
+                row.Icon = _icons.ForPath(closed.ExecutablePath);
+            }
+            row.IsSessionClosed = true;
+            row.ExecutablePath ??= closed.ExecutablePath;
+            row.AppUserModelId ??= closed.AppUserModelId;
+            row.Windows = new List<WindowRecord>();
+            row.WindowCount = 0;
+            row.Title = closed.Windows.Count > 1
+                ? $"In dieser Sitzung geschlossen · {closed.Windows.Count} Fenster"
+                : "In dieser Sitzung geschlossen";
+            row.SyncWindowItems();
             result.Add(row);
         }
         foreach (var rule in PinnedApps.ForDesktop(_settings.Current.Rules, card.Index + 1))
@@ -713,7 +764,7 @@ public sealed class WidgetViewModel : ObservableObject
             await ActivateWindowQuietAsync(handle, a.DesktopId);
             return;
         }
-        if (!a.IsPinnedEntry) return;
+        if (!a.IsPinnedEntry && !a.IsSessionClosed) return;
         await LaunchOnDesktopAsync(a.DesktopId, new LaunchRequest(
             a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
             a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
@@ -802,10 +853,22 @@ public sealed class WidgetViewModel : ObservableObject
 
     private async Task CloseAppAsync(object? p)
     {
-        if (p is not AppRowViewModel a) return;
+        if (p is not AppRowViewModel a || !a.IsRunning) return;
         var n = a.Windows.Count;
-        if (!_dialogs.Confirm("Fenster schließen", n == 1 ? $"„{a.Title}“ schließen?" : $"Alle {n} Fenster von {a.AppName} schließen?",
-                "Schließen", "Abbrechen", danger: true)) return;
+        var msg = n <= 1
+            ? $"„{a.AppName}“ nur für diese Sitzung schließen?\n\nDie Zeile bleibt ausgegraut. Beim nächsten Systemstart wird die App wieder geöffnet. Das Startprofil ändert sich nicht."
+            : $"Alle {n} Fenster von {a.AppName} nur für diese Sitzung schließen?\n\nDie Zeile bleibt ausgegraut. Beim nächsten Systemstart sind sie wieder da. Das Startprofil ändert sich nicht.";
+        if (!_dialogs.Confirm("Für diese Sitzung schließen", msg, "Schließen", "Abbrechen", danger: true)) return;
+        _controller.Closures.Remember(new SessionClosure
+        {
+            AppKey = a.AppKey,
+            AppName = a.AppName,
+            DesktopId = a.DesktopId,
+            DesktopIndex = a.Windows.FirstOrDefault()?.DesktopIndex ?? -1,
+            ExecutablePath = a.ExecutablePath ?? a.Windows.FirstOrDefault()?.ExecutablePath,
+            AppUserModelId = a.AppUserModelId ?? a.Windows.FirstOrDefault()?.AppUserModelId,
+            Windows = a.Windows.Select(w => w.Clone()).ToList(),
+        });
         foreach (var w in a.Windows) await _desktops.CloseWindowAsync(w.Handle);
         await Task.Delay(400);
         await _controller.RefreshAsync();

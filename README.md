@@ -2,17 +2,17 @@
 
 **Desktop- und Sitzungsmanager für Windows 11** – speichert Ihre Arbeitsumgebung (Programme, virtuelle Desktops, Fensterpositionen, Monitore, Explorer-Ordner) und stellt sie nach einem Neustart automatisch wieder her.
 
-Version 1.2.0 · © 2026 Willi Gering, Gering Digital
+Version 1.2.1 · © 2026 Willi Gering, Gering Digital
 
 ---
 
 ## Schnellstart
 
-1. **Portable Version:** `DeskRecall-1.2.0-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
+1. **Portable Version:** `DeskRecall-1.2.1-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
    Die Datei `portable.flag` neben der EXE sorgt dafür, dass alle Daten im Unterordner `Daten` liegen. Löschen Sie sie, wenn die Daten stattdessen unter `%LOCALAPPDATA%\DeskRecall` liegen sollen.
 2. Beim ersten Start trägt sich DeskRecall in den Autostart ein (`HKCU\…\Run`, ohne Administratorrechte – abschaltbar unter *Einstellungen → Allgemein*).
 3. Arbeiten Sie normal. DeskRecall sichert automatisch bei jeder Änderung (und zusätzlich alle 2 Minuten als Sicherheitsnetz).
-4. Nach dem nächsten Windows-Start wartet DeskRecall 8 Sekunden (einstellbar) und stellt dann die letzte Sitzung im Hintergrund wieder her.
+4. Nach dem nächsten Windows-Start wartet DeskRecall 8 Sekunden (einstellbar) und stellt dann das **Snapshot-Profil** wieder her. Ohne Snapshot bleibt es bei der letzten Sitzung.
 
 > **Windows SmartScreen:** Die EXE ist nicht signiert. Beim ersten Start ggf. „Weitere Informationen → Trotzdem ausführen“ wählen.
 
@@ -30,7 +30,9 @@ Alternativ: `DeskRecall-win-x64` (framework-abhängig, klein) benötigt die **.N
 - **Papierkorb** unten rechts in jeder Karte → diesen Desktop schließen (Fenster wandern zum Nachbar-Desktop).
 - **+ Neuer Desktop** direkt unter der letzten Karte (bzw. **+** in der eingeklappten Leiste).
 - Über das Karten-Kontextmenü lässt sich die gespeicherte Fensteranordnung wiederherstellen.
-- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Neuer Desktop, **Desktop duplizieren** (gleicher Name + gleiche Explorer-Ordner), Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Schließen, Desktop schließen).
+- **Schließen** (✕ an der Zeile oder Kontextmenü): beendet die App nur für diese Sitzung. Die Zeile bleibt **ausgegraut** stehen und wird beim nächsten Systemstart wieder geöffnet. Das Startprofil ändert sich dadurch nicht.
+- **Snapshot:** richtet die Desktops ein, benennt das Profil. Genau dieser offene Zustand (nicht die ausgegrauten Zeilen) wird beim nächsten Systemstart geladen.
+- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Neuer Desktop, **Desktop duplizieren** (gleicher Name + gleiche Explorer-Ordner), Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Für diese Sitzung schließen, Desktop schließen).
 - Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab). Bei einer anderen Karte wechselt schon der erste Klick sofort den Desktop; während des Umbenennens wechselt ein Klick nicht.
 - Chevron an der Karte → auf-/zuklappen.
 - Unten: **Profil** · **Verlauf** (jede frühere Sicherung wiederherstellen).
@@ -47,8 +49,8 @@ Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Al
 |---|---|
 | Sicherung | Bei Änderungen (WinEvent-Hooks, out-of-context, gebündelt), 30 s, 1 min, 5 min oder nur manuell; zusätzlich beim Abmelden/Herunterfahren (`WM_QUERYENDSESSION`). Atomar: temporäre Datei + `File.Replace` mit `.bak`. |
 | Schutz | Eine deutlich kleinere Sicherung beim Herunterfahren ersetzt die gute periodische Sicherung nicht. Nach dem Autostart überschreibt der fast leere Startzustand die Sitzung vor dem Neustart nicht, bevor die Wiederherstellung fertig ist. |
-| Gespeichert | Prozessname, EXE-Pfad bzw. AppUserModelID (Store-Apps), Fensterklasse und -titel, virtueller Desktop (GUID + Index), Normalposition/-größe, Zustand (normal/minimiert/maximiert), Monitor (Gerätepfad), Dokumentpfade aus der Befehlszeile (nur echte, existierende Dateien), Explorer-Ordner, Zeitpunkt. |
-| Wiederherstellung | Desktops abgleichen (GUID, dann Reihenfolge) → fehlende anlegen, Namen/Reihenfolge setzen → laufende Fenster zuordnen → nur fehlende Programme starten → auf Fenster warten (Splashscreens werden ignoriert, Zeitlimit) → Position/Zustand setzen → Fenster per HWND auf den Ziel-Desktop verschieben, **ohne** Desktop-Wechsel → am Ende einmal den zuletzt aktiven Desktop aktivieren. |
+| Gespeichert | Prozessname, EXE-Pfad bzw. AppUserModelID (Store-Apps), Fensterklasse und -titel, virtueller Desktop (GUID + Index), Normalposition/-größe, Snap (frei, halbe Seite, Viertel, maximiert, Vollbild), Zustand (normal/minimiert/maximiert), Monitor (Gerätepfad und Skalierung), jedes Fenster einer App einzeln, Dokumentpfade aus der Befehlszeile (nur echte, existierende Dateien), Explorer-Ordner, Zeitpunkt. |
+| Wiederherstellung | Beim Systemstart das Snapshot-Profil, sonst die letzte Sitzung. Desktops abgleichen (GUID, dann Reihenfolge) → fehlende anlegen, Namen/Reihenfolge setzen → laufende Fenster zuordnen → fehlende Programme starten → läuft ein Programm ohne Fenster (z. B. Teams im Hintergrund), wird es einmal geweckt → auf Fenster warten (Splashscreens werden ignoriert, ersetzte Fenster neu zugeordnet) → Position, Snap-Zone und Zustand setzen → Fenster per HWND auf den Ziel-Desktop verschieben und prüfen, **ohne** Desktop-Wechsel → am Ende einmal den zuletzt aktiven Desktop aktivieren. |
 | Doppelstarts | Läuft ein Programm schon, wird es nie erneut gestartet. Single-Instance-Apps (Steam, Discord, Spotify …) und Browser werden genau einmal gestartet. |
 | Browser | Firefox, Chrome, Edge, Brave, Vivaldi, Opera werden ohne URLs gestartet – ihre eigene Sitzungswiederherstellung öffnet Fenster und Tabs. DeskRecall ordnet die Fenster per Titel/Größe den Desktops zu. Im Widget werden Fenster und Tab-Titel über UI Automation angezeigt (im Hintergrund, gedrosselt, nur solange das Widget sichtbar ist). Es werden **keine** Browserdaten, URLs, Verläufe, Passwörter oder Cookies gelesen. |
 | Regeln | Pro Programm (optional Titel): Ziel-Desktop, Monitor, Startzustand, nie automatisch starten, ausschließen, live anwenden. Einzeln schaltbar, Vorrang vor der Sitzung, oberste passende Regel gewinnt je Eigenschaft. |

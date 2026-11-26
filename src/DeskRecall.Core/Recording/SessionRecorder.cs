@@ -1,5 +1,6 @@
 using System.Reflection;
 using DeskRecall.Core.Abstractions;
+using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Rules;
@@ -72,6 +73,9 @@ public sealed class SessionRecorder : ISessionRecorder
 
             var w = w0.Clone();
             w.DesktopIndex = w.IsPinned ? -1 : desktops.FindIndex(d => d.Id == w.DesktopId);
+            var mon = snapshot.Monitors.FirstOrDefault(m => m.Id == w.MonitorId)
+                      ?? MonitorRemapper.MonitorForRect(w.NormalBounds, snapshot.Monitors);
+            w.Snap = SnapLayoutMath.Classify(w.NormalBounds, w.State, mon);
             if (!s.Backup.StoreWindowTitles) w.Title = "";
             if (!s.Backup.CaptureDocumentPaths) w.DocumentPath = null;
             snapshot.Windows.Add(w);

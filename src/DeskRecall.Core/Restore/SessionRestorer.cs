@@ -135,50 +135,13 @@ public sealed class SessionRestorer : ISessionRestorer
         var pending = report.Items.Where(i => i.Status == RestoreItemStatus.Pending).ToList();
         if (pending.Count > 0)
         {
-            var running = SafeRunning();
-            var launches = LaunchPlanner.Plan(pending, running, o, w => _processes.Resolve(w), _directoryExists, _fileExists);
             var now = _clock.Now;
             foreach (var i in pending.Where(i => i.Status == RestoreItemStatus.Pending))
-                i.WaitDeadline = now + o.RunningAppGrace;
+                i.WaitDeadline = now + (i.Saved.Kind == AppKind.Browser ? o.WindowTimeout : o.RunningAppGrace);
+            await ExecuteLaunchesAsync(pending, o, report, progress, total, wake: false, ct).ConfigureAwait(false);
 
-            foreach (var launch in launches)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (o.DryRun)
-                {
-                    _log.Info(Src, $"[Testlauf] würde starten: {launch.Request.FileName} {launch.Request.Arguments}".TrimEnd());
-                    foreach (var i in launch.Items) { i.Status = RestoreItemStatus.Skipped; i.Message = "Testlauf – nicht gestartet"; }
-                    continue;
-                }
-                progress?.Report(new RestoreProgress($"Starte {launch.DisplayName} …", report.PlacedCount, total));
-                var result = SafeLaunch(launch.Request);
-                if (result.Status == LaunchStatus.RequiresElevation && o.ElevationPolicy == ElevationPolicy.Ask && _consent is not null)
-                {
-                    if (await _consent.ConfirmAsync(launch.DisplayName, ct).ConfigureAwait(false))
-                        result = SafeLaunch(launch.Request with { AllowElevation = true });
-                    else result = new LaunchResult(LaunchStatus.RequiresElevation, null, "Start mit Administratorrechten abgelehnt");
-                }
-                switch (result.Status)
-                {
-                    case LaunchStatus.Started:
-                        report.Launched++;
-                        _log.Info(Src, $"Gestartet: {launch.DisplayName}{(launch.Note is null ? "" : $" ({launch.Note})")}");
-                        foreach (var i in launch.Items) { i.WasLaunched = true; i.WaitDeadline = _clock.Now + o.WindowTimeout; i.Message = "gestartet – warte auf Fenster"; }
-                        break;
-                    case LaunchStatus.RequiresElevation:
-                        foreach (var i in launch.Items) { i.Status = RestoreItemStatus.NeedsElevation; i.Message = result.Message ?? "benötigt Administratorrechte – übersprungen"; }
-                        break;
-                    case LaunchStatus.NotFound:
-                        foreach (var i in launch.Items) { i.Status = RestoreItemStatus.NotFound; i.Message = result.Message ?? "Programm nicht gefunden"; }
-                        break;
-                    default:
-                        foreach (var i in launch.Items) { i.Status = RestoreItemStatus.Failed; i.Message = result.Message ?? "Start fehlgeschlagen"; }
-                        break;
-                }
-                if (o.LaunchStagger > TimeSpan.Zero) await _clock.Delay(o.LaunchStagger, ct).ConfigureAwait(false);
-            }
-
-            // 5. Auf Fenster warten und zuordnen
+            // 5. Auf Fenster warten und zuordnen. Läuft ein Programm schon, zeigt aber kein Fenster
+            //    (typisch beim Systemstart, z. B. Teams), wird es einmal geweckt statt übersprungen.
             var firstSeen = new Dictionary<long, DateTimeOffset>();
             foreach (var w in SafeEnumerate()) firstSeen[w.Handle] = _clock.Now - o.StableAfter; // vorhandene gelten als stabil
             while (!o.DryRun)
@@ -186,12 +149,29 @@ public sealed class SessionRestorer : ISessionRestorer
                 var waiting = report.Items.Where(i => i.Status == RestoreItemStatus.Pending).ToList();
                 if (waiting.Count == 0) break;
                 var t = _clock.Now;
+                var wake = new List<RestoreItem>();
                 foreach (var i in waiting.Where(i => i.WaitDeadline is { } d && t > d))
                 {
-                    i.Status = i.WasLaunched ? RestoreItemStatus.TimedOut : RestoreItemStatus.Skipped;
-                    i.Message = i.WasLaunched
-                        ? $"kein passendes Fenster nach {o.WindowTimeout.TotalSeconds:0} s (Programm unterstützt evtl. keine exakte Wiederherstellung)"
-                        : "läuft bereits, aber ohne passendes Fenster (z. B. nur im Infobereich)";
+                    if (i.WasLaunched)
+                    {
+                        i.Status = RestoreItemStatus.TimedOut;
+                        i.Message = $"kein passendes Fenster nach {o.WindowTimeout.TotalSeconds:0} s (Programm unterstützt evtl. keine exakte Wiederherstellung)";
+                    }
+                    else if (!i.WakeAttempted && ShouldWake(i, o))
+                    {
+                        i.WakeAttempted = true;
+                        wake.Add(i);
+                    }
+                    else
+                    {
+                        i.Status = RestoreItemStatus.Skipped;
+                        i.Message = "läuft bereits, aber ohne passendes Fenster (z. B. nur im Infobereich)";
+                    }
+                }
+                if (wake.Count > 0)
+                {
+                    _log.Info(Src, "Programm läuft ohne Fenster – wird einmal gestartet: " + string.Join(", ", wake.Select(i => i.Saved.FriendlyName).Distinct()));
+                    await ExecuteLaunchesAsync(wake, o, report, progress, total, wake: true, ct).ConfigureAwait(false);
                 }
                 if (report.Items.All(i => i.Status != RestoreItemStatus.Pending)) break;
 
@@ -199,13 +179,14 @@ public sealed class SessionRestorer : ISessionRestorer
                 live = SafeEnumerate();
                 var now2 = _clock.Now;
                 foreach (var w in live) firstSeen.TryAdd(w.Handle, now2);
-                // verschwundene Fenster (z. B. Splashscreen geschlossen) wieder freigeben
-                foreach (var i in report.Items.Where(i => i.AssignedHandle is long h && i.Status == RestoreItemStatus.Restored && !_windows.IsAlive(h) && i.WasLaunched))
+                // verschwundene Fenster (Splash, oder Teams legt das Fenster neu an) wieder freigeben
+                foreach (var i in report.Items.Where(i => i.AssignedHandle is long h && (i.Status is RestoreItemStatus.Restored or RestoreItemStatus.AlreadyRunning) && !_windows.IsAlive(h)))
                 {
                     assigned.Remove(i.AssignedHandle!.Value);
                     i.AssignedHandle = null;
                     i.Status = RestoreItemStatus.Pending;
-                    i.Message = "Fenster wurde geschlossen (Splashscreen?) – warte auf Hauptfenster";
+                    i.WaitDeadline = _clock.Now + o.WindowTimeout;
+                    i.Message = "Fenster wurde ersetzt – warte auf das neue Fenster";
                 }
                 MatchAndApply(report.Items, live, assigned, o, firstSeen, report, progress, total);
             }
@@ -214,21 +195,23 @@ public sealed class SessionRestorer : ISessionRestorer
                 { i.Status = RestoreItemStatus.Skipped; i.Message = "[Testlauf] läuft bereits, Fenster würde abgewartet"; }
         }
 
-        // 6. Nachkontrolle: manche Programme verändern ihre Größe nach dem Laden
-        var placed = report.Items.Where(i => i.Status == RestoreItemStatus.Restored && i.WasLaunched && i.AssignedHandle is not null).ToList();
+        // 6. Nachkontrolle: Größe und virtueller Desktop. Auch schon laufende Fenster (nicht nur frisch gestartete).
+        var placed = report.Items.Where(i => (i.Status is RestoreItemStatus.Restored or RestoreItemStatus.AlreadyRunning) && i.AssignedHandle is not null).ToList();
         if (!o.DryRun && placed.Count > 0 && o.SettleDelay > TimeSpan.Zero)
         {
             await _clock.Delay(o.SettleDelay, ct).ConfigureAwait(false);
             foreach (var i in placed)
             {
                 var h = i.AssignedHandle!.Value;
-                if (!_windows.IsAlive(h) || i.TargetState != WindowShowState.Normal) continue;
+                if (!_windows.IsAlive(h)) continue;
+                var wrongDesk = i.TargetDesktopId is Guid want && _desktops.CanManage && !i.Saved.IsPinned && _desktops.GetWindowDesktopId(h) != want;
                 var b = _windows.GetWindowBounds(h);
-                if (b is { } r && (Math.Abs(r.Left - i.TargetBounds.Left) > 10 || Math.Abs(r.Top - i.TargetBounds.Top) > 10 || Math.Abs(r.Width - i.TargetBounds.Width) > 10 || Math.Abs(r.Height - i.TargetBounds.Height) > 10))
-                {
-                    _log.Debug(Src, $"Position von {i.Saved.FriendlyName} nachkorrigiert.");
-                    Apply(i, h, o);
-                }
+                var wrongBounds = i.WasLaunched && i.TargetState == WindowShowState.Normal && b is { } r &&
+                    (Math.Abs(r.Left - i.TargetBounds.Left) > 10 || Math.Abs(r.Top - i.TargetBounds.Top) > 10 || Math.Abs(r.Width - i.TargetBounds.Width) > 10 || Math.Abs(r.Height - i.TargetBounds.Height) > 10);
+                if (!wrongDesk && !wrongBounds) continue;
+                _log.Debug(Src, wrongDesk ? $"Desktop von {i.Saved.FriendlyName} nachkorrigiert." : $"Position von {i.Saved.FriendlyName} nachkorrigiert.");
+                if (wrongBounds) Apply(i, h, o);
+                else MoveToTarget(i, h, live: null);
             }
         }
 
@@ -242,6 +225,56 @@ public sealed class SessionRestorer : ISessionRestorer
             }
         }
         progress?.Report(new RestoreProgress(report.Summary, report.PlacedCount, total));
+    }
+
+    private async Task ExecuteLaunchesAsync(List<RestoreItem> pending, RestoreOptions o, RestoreReport report, IProgress<RestoreProgress>? progress, int total, bool wake, CancellationToken ct)
+    {
+        var launches = LaunchPlanner.Plan(pending, SafeRunning(), o, w => _processes.Resolve(w), _directoryExists, _fileExists, wake);
+        foreach (var launch in launches)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (o.DryRun)
+            {
+                _log.Info(Src, $"[Testlauf] würde starten: {launch.Request.FileName} {launch.Request.Arguments}".TrimEnd());
+                foreach (var i in launch.Items) { i.Status = RestoreItemStatus.Skipped; i.Message = "Testlauf – nicht gestartet"; }
+                continue;
+            }
+            progress?.Report(new RestoreProgress($"Starte {launch.DisplayName} …", report.PlacedCount, total));
+            var result = SafeLaunch(launch.Request);
+            if (result.Status == LaunchStatus.RequiresElevation && o.ElevationPolicy == ElevationPolicy.Ask && _consent is not null)
+            {
+                if (await _consent.ConfirmAsync(launch.DisplayName, ct).ConfigureAwait(false))
+                    result = SafeLaunch(launch.Request with { AllowElevation = true });
+                else result = new LaunchResult(LaunchStatus.RequiresElevation, null, "Start mit Administratorrechten abgelehnt");
+            }
+            switch (result.Status)
+            {
+                case LaunchStatus.Started:
+                    report.Launched++;
+                    _log.Info(Src, $"Gestartet: {launch.DisplayName}{(launch.Note is null ? "" : $" ({launch.Note})")}");
+                    foreach (var i in launch.Items) { i.WasLaunched = true; i.WaitDeadline = _clock.Now + o.WindowTimeout; i.Message = "gestartet – warte auf Fenster"; }
+                    break;
+                case LaunchStatus.RequiresElevation:
+                    foreach (var i in launch.Items) { i.Status = RestoreItemStatus.NeedsElevation; i.Message = result.Message ?? "benötigt Administratorrechte – übersprungen"; }
+                    break;
+                case LaunchStatus.NotFound:
+                    foreach (var i in launch.Items) { i.Status = RestoreItemStatus.NotFound; i.Message = result.Message ?? "Programm nicht gefunden"; }
+                    break;
+                default:
+                    foreach (var i in launch.Items) { i.Status = RestoreItemStatus.Failed; i.Message = result.Message ?? "Start fehlgeschlagen"; }
+                    break;
+            }
+            if (o.LaunchStagger > TimeSpan.Zero) await _clock.Delay(o.LaunchStagger, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Browser nicht noch einmal starten (eigene Sitzung). Alles andere ohne Fenster einmal wecken.</summary>
+    private static bool ShouldWake(RestoreItem i, RestoreOptions o)
+    {
+        if (!o.LaunchMissingApps || i.NeverAutoStart) return false;
+        if (i.Saved.Kind is AppKind.Browser or AppKind.Explorer) return false;
+        if (AppCatalog.IsNeverLaunch(i.Saved.ProcessName) && i.Saved.Kind != AppKind.Uwp) return false;
+        return true;
     }
 
     private void MatchAndApply(List<RestoreItem> items, IReadOnlyList<WindowRecord> live, HashSet<long> assigned, RestoreOptions o,
@@ -289,22 +322,12 @@ public sealed class SessionRestorer : ISessionRestorer
         try
         {
             var placementOk = _windows.ApplyPlacement(hwnd, new PlacementTarget(item.TargetBounds, item.TargetState, item.TargetMonitor, Activate: false));
-            if (_desktops.CanManage)
-            {
-                if (item.Saved.IsPinned)
-                {
-                    if (!_desktops.IsWindowPinned(hwnd)) _desktops.SetWindowPinned(hwnd, true);
-                }
-                else if (item.TargetDesktopId is Guid target)
-                {
-                    var currentDesk = live?.DesktopId is { } ld && ld != Guid.Empty ? ld : _desktops.GetWindowDesktopId(hwnd);
-                    if (currentDesk != target && !_desktops.MoveWindowToDesktop(hwnd, target))
-                    {
-                        item.Message = $"konnte nicht auf Desktop {item.TargetDesktopIndex + 1} verschoben werden";
-                        _log.Warn(Src, $"{item.Saved.FriendlyName}: {item.Message}");
-                    }
-                }
-            }
+            // Platzieren zuerst, verschieben danach: SetWindowPlacement zieht ein Fenster sonst auf den
+            // aktuellen Desktop. Danach prüfen und bei Bedarf ein zweites Mal verschieben (Teams legt das
+            // Fenster oft neu auf dem sichtbaren Desktop an).
+            MoveToTarget(item, hwnd, live);
+            if (item.TargetDesktopId is Guid want && _desktops.CanManage && !item.Saved.IsPinned && _desktops.GetWindowDesktopId(hwnd) != want)
+                MoveToTarget(item, hwnd, live: null);
             return placementOk;
         }
         catch (Exception ex)
@@ -313,6 +336,23 @@ public sealed class SessionRestorer : ISessionRestorer
             _log.Warn(Src, $"{item.Saved.FriendlyName}: Platzieren fehlgeschlagen", ex);
             return false;
         }
+    }
+
+    private bool MoveToTarget(RestoreItem item, long hwnd, WindowRecord? live)
+    {
+        if (!_desktops.CanManage) return true;
+        if (item.Saved.IsPinned)
+        {
+            if (!_desktops.IsWindowPinned(hwnd)) _desktops.SetWindowPinned(hwnd, true);
+            return true;
+        }
+        if (item.TargetDesktopId is not Guid target) return true;
+        var currentDesk = live?.DesktopId is { } ld && ld != Guid.Empty ? ld : _desktops.GetWindowDesktopId(hwnd);
+        if (currentDesk == target) return true;
+        if (_desktops.MoveWindowToDesktop(hwnd, target)) return true;
+        item.Message = $"konnte nicht auf Desktop {item.TargetDesktopIndex + 1} verschoben werden";
+        _log.Warn(Src, $"{item.Saved.FriendlyName}: {item.Message}");
+        return false;
     }
 
     private void ComputeTarget(RestoreItem item, RuleOutcome rule, SessionSnapshot snapshot, IReadOnlyList<MonitorInfo> monitors, RestoreOptions o, DesktopMapping mapping)
@@ -331,6 +371,18 @@ public sealed class SessionRestorer : ISessionRestorer
             }
         }
 
+        if (item.TargetDesktopId is null && !w.IsPinned && w.DesktopId != Guid.Empty)
+        {
+            var savedDesk = snapshot.Desktops.FirstOrDefault(d => d.Id == w.DesktopId);
+            if (savedDesk is not null && mapping.SavedIndexToCurrent.TryGetValue(savedDesk.Index, out var byGuid))
+                item.TargetDesktopId = byGuid;
+            else
+            {
+                var cur = _desktops.IsAvailable ? _desktops.GetDesktops() : Array.Empty<DesktopInfo>();
+                if (cur.Any(d => d.Id == w.DesktopId)) item.TargetDesktopId = w.DesktopId;
+            }
+        }
+
         var savedMonitor = snapshot.Monitors.FirstOrDefault(m => m.Id == w.MonitorId)
                            ?? (snapshot.Monitors.Count > 0 ? MonitorRemapper.MonitorForRect(w.NormalBounds, snapshot.Monitors) : null);
         MonitorInfo? target = null;
@@ -338,14 +390,28 @@ public sealed class SessionRestorer : ISessionRestorer
             target = monitors.FirstOrDefault(m => string.Equals(m.Id, rule.TargetMonitorId, StringComparison.OrdinalIgnoreCase));
         target ??= savedMonitor is not null ? MonitorRemapper.FindCurrent(savedMonitor, monitors, o.MonitorFallback) : MonitorRemapper.MonitorForRect(w.NormalBounds, monitors);
 
-        var bounds = w.NormalBounds;
-        if (savedMonitor is not null && target is not null)
-            bounds = MonitorRemapper.Transform(bounds, savedMonitor.WorkArea, target.WorkArea, o.ScaleOnResolutionChange);
-        if (o.CorrectOffscreenWindows && monitors.Count > 0)
+        if (rule.ForcedState is null && w.Snap == SnapLayout.Maximized)
+            item.TargetState = WindowShowState.Maximized;
+
+        var snapped = SnapLayoutMath.UsesWorkArea(w.Snap) || w.Snap == SnapLayout.FullScreen;
+        RectI bounds;
+        if (snapped && target is not null && rule.ForcedState is null)
         {
-            var corrected = PlacementCorrector.Correct(bounds, monitors, target);
-            if (corrected != bounds) _log.Debug(Src, $"{w.FriendlyName}: Position {bounds} → {corrected} (außerhalb des sichtbaren Bereichs)");
-            bounds = corrected;
+            bounds = SnapLayoutMath.BoundsFor(w.Snap, target);
+            if (item.TargetState != WindowShowState.Minimized)
+                item.TargetState = WindowShowState.Normal;
+        }
+        else
+        {
+            bounds = w.NormalBounds;
+            if (savedMonitor is not null && target is not null)
+                bounds = MonitorRemapper.Transform(bounds, savedMonitor.WorkArea, target.WorkArea, o.ScaleOnResolutionChange);
+            if (o.CorrectOffscreenWindows && monitors.Count > 0)
+            {
+                var corrected = PlacementCorrector.Correct(bounds, monitors, target);
+                if (corrected != bounds) _log.Debug(Src, $"{w.FriendlyName}: Position {bounds} → {corrected} (außerhalb des sichtbaren Bereichs)");
+                bounds = corrected;
+            }
         }
         item.TargetBounds = bounds;
         item.TargetMonitor = target;

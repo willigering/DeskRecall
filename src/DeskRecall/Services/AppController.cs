@@ -7,6 +7,7 @@ using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
 using DeskRecall.Core.Recording;
 using DeskRecall.Core.Restore;
+using DeskRecall.Core.Session;
 using DeskRecall.Core.Rules;
 using DeskRecall.Core.Settings;
 using DeskRecall.Core.Storage;
@@ -83,6 +84,8 @@ public sealed class AppController : IDisposable
     /// <summary>Vom Widget gesetzt: nur wenn die Oberfläche sichtbar ist, wird sie laufend aktualisiert.</summary>
     public bool UiActive { get; set; } = true;
     public IntPtr WidgetHandle { get; set; }
+    /// <summary>Apps, die in dieser Sitzung über DeskRecall geschlossen wurden. Kommen beim nächsten Start wieder.</summary>
+    public SessionClosures Closures { get; } = new();
 
     // ---------------------------------------------------------------- Start
 
@@ -101,24 +104,29 @@ public sealed class AppController : IDisposable
 
         var s = _settings.Current;
         var last = _store.GetHistory().FirstOrDefault();
-        if (autostart && s.General.AutoRestoreOnStartup && _store.LoadLast() is { } snapshot && snapshot.Windows.Count > 0)
+        var startupProfile = string.IsNullOrWhiteSpace(s.Restore.StartupProfile) ? null : _profiles.Get(s.Restore.StartupProfile)?.Snapshot;
+        if (startupProfile is null && !string.IsNullOrWhiteSpace(s.Restore.StartupProfile))
+            _log.Warn(Src, $"Startprofil „{s.Restore.StartupProfile}“ wurde nicht gefunden – es wird die letzte Sitzung verwendet.");
+        var snapshot = StartupChoice.Select(startupProfile, _store.LoadLast());
+        if (autostart && s.General.AutoRestoreOnStartup && snapshot is { Windows.Count: > 0 })
         {
             // Schutz: Bis die Wiederherstellung fertig ist, darf der fast leere Startzustand die Sitzung vor dem Neustart nicht überschreiben.
             var grace = TimeSpan.FromSeconds(s.Restore.StartupDelaySeconds + s.Restore.WindowTimeoutSeconds + 120);
             _guard = new StartupGuard(DateTimeOffset.Now, grace, active: true);
             _store.Protect(last?.FilePath);
-            _ = AutoRestoreAsync(snapshot, TimeSpan.FromSeconds(s.Restore.StartupDelaySeconds));
+            var label = startupProfile is not null && ReferenceEquals(snapshot, startupProfile) ? s.Restore.StartupProfile : "Letzte Sitzung";
+            _ = AutoRestoreAsync(snapshot, TimeSpan.FromSeconds(s.Restore.StartupDelaySeconds), label);
         }
     }
 
-    private async Task AutoRestoreAsync(SessionSnapshot snapshot, TimeSpan delay)
+    private async Task AutoRestoreAsync(SessionSnapshot snapshot, TimeSpan delay, string label)
     {
         try
         {
             RestoreStatus = $"Wiederherstellung startet in {delay.TotalSeconds:0} s …";
             StatusChanged?.Invoke();
             await Task.Delay(delay);
-            await RestoreAsync(snapshot, "Letzte Sitzung", offerCloseExtras: false);
+            await RestoreAsync(snapshot, label, offerCloseExtras: false);
         }
         catch (Exception ex) { _log.Error(Src, "Automatische Wiederherstellung fehlgeschlagen", ex); }
         finally { _guard.Release(); }
@@ -275,6 +283,7 @@ public sealed class AppController : IDisposable
                 }
                 return new LiveState(desktops, current, windows, DateTimeOffset.Now);
             });
+            Closures.ForgetRunning(state.Windows);
 
             var skipUi = UnchangedForUi(previous, state.Desktops, state.CurrentDesktopId, state.Windows);
             Current = state;
@@ -353,6 +362,7 @@ public sealed class AppController : IDisposable
             var outcome = await Task.Run(() =>
             {
                 var snap = _recorder.Capture(kind);
+                if (kind != SessionKind.Profile) Closures.MergeInto(snap);
                 return _store.Save(snap, force: kind == SessionKind.Manual);
             });
             LastSaveFailed = outcome == SaveOutcome.Failed;
@@ -380,6 +390,7 @@ public sealed class AppController : IDisposable
             if (!_guard.IsReleased(DateTimeOffset.Now)) { _log.Info(Src, "Herunterfahren während des Start-Schutzes – vorherige Sitzung bleibt erhalten."); return; }
             if (IsRestoring) { _restoreCts?.Cancel(); _log.Info(Src, "Herunterfahren während der Wiederherstellung – keine neue Sicherung."); return; }
             var snap = _recorder.Capture(SessionKind.Shutdown);
+            Closures.MergeInto(snap);
             var prev = _store.LoadLast();
             if (!ShutdownSnapshotPolicy.ShouldAccept(prev, snap))
             {
@@ -465,6 +476,59 @@ public sealed class AppController : IDisposable
     }
 
     public SessionSnapshot CaptureForProfile() => _recorder.Capture(SessionKind.Profile);
+
+    /// <summary>
+    /// Speichert genau den gerade offenen Zustand als Profil und lädt dieses Profil beim nächsten Systemstart.
+    /// In dieser Sitzung geschlossene Apps gehören nicht dazu.
+    /// </summary>
+    public async Task<bool> TakeSnapshotAsync()
+    {
+        var current = _settings.Current.Restore.StartupProfile;
+        var suggested = string.IsNullOrWhiteSpace(current) ? "Arbeitsplatz" : current;
+        var raw = _dialogs.Prompt(
+            "Snapshot",
+            "Name für diesen Zustand. Es wird gespeichert, was gerade geöffnet ist – Monitor, Position, Größe, Snap und jedes Fenster.\nAusgegraute, in dieser Sitzung geschlossene Apps gehören nicht dazu.\nGenau dieses Profil wird beim nächsten Systemstart geladen.",
+            suggested,
+            "Snapshot speichern");
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        string name;
+        try { name = ProfileManager.ValidateName(raw); }
+        catch (ArgumentException ex) { _dialogs.Info("Snapshot", ex.Message); return false; }
+
+        if (_profiles.Exists(name) && !string.Equals(name, current, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_dialogs.Confirm("Profil ersetzen", $"Profil „{name}“ gibt es schon. Mit diesem Snapshot ersetzen und beim Systemstart laden?", "Ersetzen", "Abbrechen"))
+                return false;
+        }
+
+        SessionSnapshot snap;
+        try { snap = await Task.Run(() => _recorder.Capture(SessionKind.Profile)); }
+        catch (Exception ex)
+        {
+            _log.Error(Src, "Snapshot fehlgeschlagen", ex);
+            _dialogs.Info("Snapshot", "Der Zustand konnte nicht erfasst werden: " + ex.Message);
+            return false;
+        }
+        if (snap.Windows.Count == 0 && !_dialogs.Confirm("Leerer Snapshot", "Es ist kein Programmfenster geöffnet. Diesen leeren Zustand beim Systemstart laden?", "Trotzdem speichern", "Abbrechen"))
+            return false;
+
+        try
+        {
+            if (_profiles.Exists(name)) _profiles.Update(name, snap);
+            else _profiles.Create(name, snap);
+        }
+        catch (Exception ex)
+        {
+            _log.Error(Src, "Snapshot konnte nicht gespeichert werden", ex);
+            _dialogs.Info("Snapshot", ex.Message);
+            return false;
+        }
+        _settings.Update(s => { s.Restore.StartupProfile = name; s.ActiveProfile = name; });
+        _log.Info(Src, $"Snapshot „{name}“: {snap.Windows.Count} Fenster auf {snap.Desktops.Count} Desktops, wird beim Systemstart geladen.");
+        Notification?.Invoke("Snapshot gespeichert", $"„{name}“ wird beim Systemstart geladen ({snap.Windows.Count} Fenster, {snap.Desktops.Count} Desktops).");
+        StatusChanged?.Invoke();
+        return true;
+    }
 
     public void Dispose()
     {

@@ -221,4 +221,120 @@ public class SessionRestorerTests
         w.Clock.Resume();
         await first;
     }
+
+    [Fact]
+    public async Task Two_browser_windows_restore_their_own_snap_and_desktop()
+    {
+        var w = new World();
+        w.Proc.OnLaunch["chrome"] = _ => w.Clock.Schedule(TimeSpan.FromMilliseconds(60), () =>
+        {
+            w.Win.Add(T.W("chrome", "Links", cls: "Chrome_WidgetWin_1", handle: 11, kind: AppKind.Browser));
+            w.Win.Add(T.W("chrome", "Rechts", cls: "Chrome_WidgetWin_1", handle: 12, kind: AppKind.Browser));
+        });
+        var left = T.W("chrome", "Links", 0, RectI.FromSize(10, 10, 400, 300), cls: "Chrome_WidgetWin_1", kind: AppKind.Browser);
+        left.Snap = SnapLayout.LeftHalf;
+        var right = T.W("chrome", "Rechts", 1, RectI.FromSize(50, 50, 400, 300), cls: "Chrome_WidgetWin_1", kind: AppKind.Browser);
+        right.Snap = SnapLayout.RightHalf;
+
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(left, right), Fast);
+
+        Assert.Equal(2, report.PlacedCount);
+        Assert.Equal(1, report.Launched);
+        Assert.Single(w.Proc.Launched);
+        Assert.Equal(new RectI(0, 0, 960, 1032), w.Win.Applied[11].NormalBounds);
+        Assert.Equal(new RectI(960, 0, 1920, 1032), w.Win.Applied[12].NormalBounds);
+        Assert.Equal(WindowShowState.Normal, w.Win.Applied[11].State);
+        Assert.Equal(w.Vd.Desktops[0].Id, w.Vd.WindowDesktop[11]);
+        Assert.Equal(w.Vd.Desktops[1].Id, w.Vd.WindowDesktop[12]);
+        Assert.All(report.Items, i => Assert.Equal(RestoreItemStatus.Restored, i.Status));
+    }
+
+    [Fact]
+    public async Task Snap_half_uses_the_current_monitor_work_area()
+    {
+        var w = new World();
+        var saved = T.W("code", "Editor", 1, RectI.FromSize(40, 40, 500, 400));
+        saved.Snap = SnapLayout.LeftHalf;
+        var snap = w.Snapshot(saved);
+        snap.Monitors = new List<MonitorInfo> { T.Mon("M1", 0, 0, 1920, 1080, primary: true) };
+        w.Mon.Monitors.Clear();
+        w.Mon.Monitors.Add(T.Mon("M1", 0, 0, 2560, 1440, primary: true));
+        w.Win.Add(T.W("code", "Editor", handle: 15));
+        w.Proc.Running.Add(new RunningProcess(5, "code", null));
+
+        var report = await w.Restorer().RestoreAsync(snap, Fast);
+
+        Assert.Equal(RestoreItemStatus.AlreadyRunning, report.Items.Single().Status);
+        Assert.Equal(new RectI(0, 0, 1280, 1392), w.Win.Applied[15].NormalBounds);
+        Assert.Equal(WindowShowState.Normal, w.Win.Applied[15].State);
+    }
+
+    [Fact]
+    public async Task Placement_that_drops_the_desktop_is_corrected_afterwards()
+    {
+        var w = new World();
+        w.Win.Add(T.W("ms-teams", "Teams", handle: 7, kind: AppKind.SingleInstance));
+        w.Proc.Running.Add(new RunningProcess(1, "ms-teams", null));
+        w.Win.AfterApply = h => w.Vd.WindowDesktop.Remove(h);
+
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(T.W("ms-teams", "Teams", 2, kind: AppKind.SingleInstance)), Fast);
+
+        Assert.Equal(RestoreItemStatus.AlreadyRunning, report.Items.Single().Status);
+        Assert.Equal(w.Vd.Desktops[2].Id, w.Vd.WindowDesktop[7]);
+    }
+
+    [Fact]
+    public async Task Running_app_without_a_window_is_woken_once_onto_its_desktop()
+    {
+        var w = new World();
+        w.Proc.Running.Add(new RunningProcess(4, "ms-teams", null));
+        DateTimeOffset? launchedAt = null;
+        var start = w.Clock.Now;
+        w.Proc.OnLaunch["ms-teams"] = _ =>
+        {
+            launchedAt = w.Clock.Now;
+            w.Clock.Schedule(TimeSpan.FromMilliseconds(60), () => w.Win.Add(T.W("ms-teams", "Teams", handle: 8, kind: AppKind.SingleInstance)));
+        };
+
+        var report = await w.Restorer().RestoreAsync(w.Snapshot(T.W("ms-teams", "Teams", 2, kind: AppKind.SingleInstance)), Fast);
+
+        Assert.Equal(RestoreItemStatus.Restored, report.Items.Single().Status);
+        var launch = Assert.Single(w.Proc.Launched);
+        Assert.Contains("ms-teams", launch.FileName, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(launchedAt);
+        Assert.True(launchedAt!.Value - start >= Fast.RunningAppGrace);
+        Assert.Equal(w.Vd.Desktops[2].Id, w.Vd.WindowDesktop[8]);
+    }
+
+    [Fact]
+    public async Task Running_browser_without_a_window_is_not_started_again()
+    {
+        var w = new World();
+        w.Proc.Running.Add(new RunningProcess(1, "chrome", null));
+        var report = await w.Restorer().RestoreAsync(
+            w.Snapshot(T.W("chrome", "Tab", 2, kind: AppKind.Browser)),
+            Fast with { WindowTimeout = TimeSpan.FromMilliseconds(300) });
+
+        Assert.Empty(w.Proc.Launched);
+        Assert.Equal(RestoreItemStatus.Skipped, report.Items.Single().Status);
+        Assert.Contains("läuft bereits", report.Items.Single().Message);
+    }
+
+    [Fact]
+    public async Task Unknown_desktop_index_still_follows_the_saved_desktop_id()
+    {
+        var w = new World();
+        var snap = w.Snapshot();
+        var saved = T.W("code", "Notiz");
+        saved.DesktopIndex = -1;
+        saved.DesktopId = snap.Desktops[2].Id;
+        snap.Windows.Add(saved);
+        w.Win.Add(T.W("code", "Notiz", handle: 81));
+        w.Proc.Running.Add(new RunningProcess(5, "code", null));
+
+        var report = await w.Restorer().RestoreAsync(snap, Fast);
+
+        Assert.Equal(RestoreItemStatus.AlreadyRunning, report.Items.Single().Status);
+        Assert.Equal(w.Vd.Desktops[2].Id, w.Vd.WindowDesktop[81]);
+    }
 }

@@ -164,6 +164,21 @@ public class LaunchPlannerTests
     }
 
     [Fact]
+    public void Wake_starts_a_running_process_that_showed_no_window()
+    {
+        var running = new[] { new RunningProcess(1, "ms-teams", null) };
+        var quiet = I(T.W("ms-teams", kind: AppKind.SingleInstance));
+        Assert.Empty(Plan(new[] { quiet }, running));
+        Assert.Equal(RestoreItemStatus.Pending, quiet.Status);
+
+        var woken = I(T.W("ms-teams", kind: AppKind.SingleInstance));
+        var plan = LaunchPlanner.Plan(new[] { woken }, running, Opt,
+            w => new ResolvedLaunch(w.ExecutablePath!, null, null), _ => true, _ => true, wake: true);
+        var launch = Assert.Single(plan);
+        Assert.Contains("ms-teams", launch.Request.FileName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Store_apps_launch_via_aumid()
     {
         var w = T.W("CalculatorApp", kind: AppKind.Uwp); w.AppUserModelId = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App";

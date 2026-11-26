@@ -28,6 +28,8 @@ public sealed class WindowRecord
     /// <summary>Normale (wiederhergestellte) Fensterposition in Bildschirmkoordinaten.</summary>
     public RectI NormalBounds { get; set; }
     public WindowShowState State { get; set; }
+    /// <summary>Snap-Zone auf dem Monitor. Frei behält <see cref="NormalBounds"/>, Zonen werden beim Wiederherstellen neu aus dem Zielmonitor berechnet.</summary>
+    public SnapLayout Snap { get; set; }
     public string? MonitorId { get; set; }
     public int ZOrder { get; set; }
 

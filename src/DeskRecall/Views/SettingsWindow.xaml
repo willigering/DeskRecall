@@ -301,6 +301,7 @@
                     <StackPanel Margin="28,22,28,28" MaxWidth="760" HorizontalAlignment="Left" Width="680">
                         <TextBlock Text="Wiederherstellung" Style="{StaticResource HeaderText}" />
                         <TextBlock Text="Wie DeskRecall Programme startet und Fenster zurück auf ihre Desktops bringt." Style="{StaticResource DimText}" Margin="0,4,0,8" />
+                        <TextBlock Text="{Binding StartupProfileHint}" Style="{StaticResource DimText}" Margin="0,0,0,8" TextWrapping="Wrap" />
                         <Border Style="{StaticResource SettingsCard}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -320,7 +321,7 @@
                             <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding LaunchMissingApps}">
                                 <StackPanel>
                                     <TextBlock Text="Fehlende Programme starten" />
-                                    <TextBlock Text="Bereits laufende Programme werden nie doppelt gestartet." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                    <TextBlock Text="Läuft ein Programm schon mit Fenster, wird es nicht doppelt gestartet. Ohne Fenster wird es einmal geweckt." Style="{StaticResource DimText}" Margin="0,2,0,0" />
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -532,7 +533,7 @@
                             <Button Style="{StaticResource SecondaryButton}" Content="Importieren …" Command="{Binding Profiles.ImportCommand}" Margin="0,0,8,8" />
                             <Button Style="{StaticResource DangerButton}" Content="Löschen" Command="{Binding Profiles.DeleteCommand}" Margin="0,0,8,8" />
                         </WrapPanel>
-                        <TextBlock Style="{StaticResource DimText}" Margin="0,8,0,0" Text="„Standard“ ist immer die automatisch gesicherte letzte Sitzung. Beim Laden eines Profils werden fehlende Programme gestartet; geöffnete Programme werden nur nach ausdrücklicher Bestätigung geschlossen." />
+                        <TextBlock Style="{StaticResource DimText}" Margin="0,8,0,0" TextWrapping="Wrap" Text="„Standard“ ist immer die automatisch gesicherte letzte Sitzung. Der Snapshot-Button im Widget speichert den gerade offenen Zustand als Profil und lädt genau dieses Profil beim Systemstart. Beim Laden eines Profils werden fehlende Programme gestartet; geöffnete Programme werden nur nach ausdrücklicher Bestätigung geschlossen." />
                     </StackPanel>
                 </ScrollViewer>
                 <!-- ===== Erscheinungsbild ===== -->

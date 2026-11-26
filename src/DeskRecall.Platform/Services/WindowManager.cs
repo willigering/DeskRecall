@@ -248,11 +248,13 @@ public sealed class WindowManager : IWindowManager
         // Maximiert auf anderem Monitor: zuerst wiederherstellen, sonst bleibt es auf dem alten Monitor maximiert
         if (target.State == WindowShowState.Maximized && IsZoomed(h) && mon is not null && _monitors.ForWindow(h)?.Id != mon.Id)
         {
-            var restore = wp; restore.showCmd = SW_SHOWNOACTIVATE; restore.flags = WPF_ASYNCWINDOWPLACEMENT;
+            var restore = wp; restore.showCmd = SW_SHOWNOACTIVATE; restore.flags = 0;
             SetWindowPlacement(h, ref restore);
         }
 
-        wp.flags = WPF_ASYNCWINDOWPLACEMENT;
+        // Synchron. Ein asynchrones SetWindowPlacement/SetWindowPos wird erst nach dem
+        // Verschieben auf den virtuellen Desktop fertig und zieht das Fenster auf den sichtbaren Desktop zurück.
+        wp.flags = 0;
         wp.rcNormalPosition = new RECT(b.Left - dx, b.Top - dy, b.Right - dx, b.Bottom - dy);
         wp.showCmd = target.State switch
         {
@@ -265,7 +267,7 @@ public sealed class WindowManager : IWindowManager
         if (ok && target.State == WindowShowState.Normal)
         {
             // Zweimal setzen: beim Wechsel auf einen Monitor mit anderer Skalierung (DPI) passt Windows die Größe an.
-            const uint flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
+            const uint flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
             SetWindowPos(h, IntPtr.Zero, b.Left, b.Top, b.Width, b.Height, flags);
             SetWindowPos(h, IntPtr.Zero, b.Left, b.Top, b.Width, b.Height, flags);
         }

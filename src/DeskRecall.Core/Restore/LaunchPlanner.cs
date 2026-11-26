@@ -25,7 +25,8 @@ public static class LaunchPlanner
         RestoreOptions options,
         Func<WindowRecord, ResolvedLaunch?> resolve,
         Func<string, bool> directoryExists,
-        Func<string, bool> fileExists)
+        Func<string, bool> fileExists,
+        bool wake = false)
     {
         var launches = new List<LaunchItem>();
         var runningNames = new HashSet<string>(running.Select(p => AppIdentity.NormalizeProcessName(p.Name)));
@@ -61,7 +62,9 @@ public static class LaunchPlanner
 
             var isRunning = runningNames.Contains(proc) || (first.ExecutablePath is not null && runningPaths.Contains(first.ExecutablePath));
 
-            if (isRunning)
+            // Beim normalen Plan nicht doppelt starten. „wake“ startet trotzdem einmal,
+            // wenn der Prozess läuft, aber kein Fenster erschienen ist (z. B. Teams nur im Hintergrund).
+            if (isRunning && !wake)
             {
                 foreach (var i in items) i.Message = "läuft bereits – warte auf Fenster";
                 continue;

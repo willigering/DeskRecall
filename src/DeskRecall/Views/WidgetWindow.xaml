@@ -121,6 +121,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Grid Width="18" Height="18" VerticalAlignment="Center">
                             <Border CornerRadius="4" Background="{StaticResource AccentSoftBrush}" />
@@ -140,6 +141,11 @@
                                    Visibility="{Binding CanExpand, Converter={StaticResource BoolToVis}}"
                                    ToolTip="{Binding BadgeToolTip}" />
                         <TextBlock x:Name="WinGlyph" Grid.Column="4" Text="&#xE8A7;" Style="{StaticResource IconText}" FontSize="12" Foreground="{StaticResource TextFaintBrush}" ToolTip="Fenster in den Vordergrund holen" />
+                        <Button x:Name="CloseAppButton" Grid.Column="5" Style="{StaticResource IconButton}" Width="22" Height="22" FontSize="11" Margin="2,0,0,0"
+                                Content="&#xE711;" ToolTip="Für diese Sitzung schließen"
+                                Command="{Binding DataContext.CloseAppCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" />
                     </Grid>
                 </Border>
                 <Border x:Name="SubHost" Margin="27,0,0,0" ClipToBounds="True"
@@ -167,6 +173,11 @@
                     <Setter TargetName="Row" Property="Opacity" Value="0.7" />
                     <Setter TargetName="TitleText" Property="Visibility" Value="Visible" />
                     <Setter TargetName="WinGlyph" Property="Text" Value="&#xE768;" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSessionClosed}" Value="True">
+                    <Setter TargetName="Row" Property="Opacity" Value="0.4" />
+                    <Setter TargetName="TitleText" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="WinGlyph" Property="Text" Value="&#xE711;" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -418,6 +429,17 @@
                         </ComboBox>
                         <Button x:Name="HistoryButton" Grid.Column="1" Style="{StaticResource SquareButton}" Height="34" Width="34" Margin="8,0,0,0" Content="&#xE81C;"
                                 Command="{Binding ToggleHistoryCommand}" ToolTip="Sitzungsverlauf" />
+                    </Grid>
+                    <Button Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" HorizontalAlignment="Stretch"
+                            Command="{Binding SnapshotCommand}"
+                            ToolTip="Aktuellen Zustand benennen. Genau dieser Zustand wird beim Systemstart geladen.">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE722;" Style="{StaticResource IconText}" FontSize="13" Margin="0,0,8,0" />
+                            <TextBlock Text="Snapshot" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Text="{Binding StartupHint}" Style="{StaticResource DimText}" FontSize="11" Margin="2,6,2,0" TextWrapping="Wrap" />
+                    <Grid>
                         <Popup x:Name="HistoryPopup" Grid.ColumnSpan="2" PlacementTarget="{Binding ElementName=HistoryButton}" Placement="Top" VerticalOffset="-8"
                                HorizontalOffset="-238" AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"
                                IsOpen="{Binding IsHistoryOpen, Mode=TwoWay}">

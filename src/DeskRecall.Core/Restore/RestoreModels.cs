@@ -69,6 +69,8 @@ public sealed class RestoreItem
     public string? Message { get; set; }
     public long? AssignedHandle { get; set; }
     public bool WasLaunched { get; set; }
+    /// <summary>Prozess lief schon ohne Fenster und wurde einmal zusätzlich gestartet.</summary>
+    public bool WakeAttempted { get; set; }
     public DateTimeOffset? WaitDeadline { get; set; }
 
     public override string ToString() => $"{Saved.FriendlyName}: {Status} {Message}";

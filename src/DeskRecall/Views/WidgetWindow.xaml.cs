@@ -511,8 +511,10 @@ public partial class WidgetWindow : Window
         menu.Items.Add(new Separator());
         if (row.IsPinnedEntry)
             menu.Items.Add(Item("Von diesem Desktop entfernen", "\uE738", () => _vm.RemovePinnedAppCommand.Execute(row)));
-        if (row.IsRunning)
-            menu.Items.Add(Item(row.Windows.Count > 1 ? "Alle Fenster schließen …" : "Schließen …", "\uE711", () => _vm.CloseAppCommand.Execute(row)));
+        if (row.IsSessionClosed)
+            menu.Items.Add(Item("Wieder öffnen", "\uE768", () => _vm.ActivateAppCommand.Execute(row)));
+        else if (row.IsRunning)
+            menu.Items.Add(Item(row.Windows.Count > 1 ? "Alle Fenster für diese Sitzung schließen …" : "Für diese Sitzung schließen …", "\uE711", () => _vm.CloseAppCommand.Execute(row)));
         HookMenu(menu);
     }
 
@@ -562,6 +564,11 @@ public partial class WidgetWindow : Window
 
     private void Row_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.OriginalSource is DependencyObject src && FindParent<Button>(src) is not null)
+        {
+            _pressedRow = null;
+            return;
+        }
         _dragStart = e.GetPosition(this);
         _pressedRow = Ctx<AppRowViewModel>(sender);
     }
