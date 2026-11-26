@@ -32,6 +32,8 @@ public sealed class WindowManager : IWindowManager
     private readonly ILogService _log;
     private readonly Func<bool> _captureDocuments;
     private readonly int _ownPid = Environment.ProcessId;
+    private static Dictionary<int, string> _processNames = new();
+    private static long _processNamesTick;
 
     public WindowManager(WindowsVirtualDesktopService desktops, MonitorManager monitors, ExplorerFolderService explorer, ILogService log, Func<bool> captureDocuments)
     {
@@ -40,7 +42,7 @@ public sealed class WindowManager : IWindowManager
 
     private sealed record RawWindow(IntPtr Handle, int Pid, string Class, string Title, long Style, long ExStyle, int Cloaked, int Z);
 
-    public IReadOnlyList<WindowRecord> EnumerateAppWindows()
+    public IReadOnlyList<WindowRecord> EnumerateAppWindows(bool detailed = true)
     {
         var raw = new List<RawWindow>();
         var z = 0;
@@ -61,17 +63,15 @@ public sealed class WindowManager : IWindowManager
             return desktopIds.TryGetValue(r.Handle, out var id) && id != current; // auf anderem Desktop
         }).ToList();
 
-        var names = new Dictionary<int, string>();
         string? NameOf(int pid)
         {
-            if (names.Count == 0)
-                foreach (var p in Process.GetProcesses()) { using (p) names[p.Id] = p.ProcessName; }
-            return names.TryGetValue(pid, out var n) ? n : null;
+            if (detailed) RefreshProcessNames();
+            return _processNames.TryGetValue(pid, out var n) ? n : null;
         }
 
         IReadOnlyDictionary<long, string>? folders = null;
         var monitors = _monitors.GetMonitors();
-        var captureDocs = _captureDocuments();
+        var captureDocs = detailed && _captureDocuments();
         var result = new List<WindowRecord>(raw.Count);
 
         foreach (var r in raw)
@@ -95,7 +95,7 @@ public sealed class WindowManager : IWindowManager
                     kind = AppKind.Uwp; // Paket-Apps (Store) nur über ihre AppUserModelID startbar
 
                 var (bounds, state) = ReadPlacement(r.Handle, monitors);
-                var mon = _monitors.ForWindow(r.Handle);
+                var mon = detailed ? _monitors.ForWindow(r.Handle) : null;
                 var rec = new WindowRecord
                 {
                     Handle = (long)r.Handle,
@@ -103,7 +103,7 @@ public sealed class WindowManager : IWindowManager
                     ProcessName = proc.Name,
                     ExecutablePath = proc.Path,
                     AppUserModelId = aumid,
-                    DisplayName = AppCatalog.FriendlyName(proc.Name) ?? ProcessInfo.FileDescription(proc.Path) ?? proc.Name,
+                    DisplayName = AppCatalog.FriendlyName(proc.Name) ?? (detailed ? ProcessInfo.FileDescription(proc.Path) : null) ?? proc.Name,
                     WindowClass = cls,
                     Title = r.Title,
                     DesktopId = desktopIds.TryGetValue((long)r.Handle, out var did) ? did : Guid.Empty,
@@ -116,7 +116,7 @@ public sealed class WindowManager : IWindowManager
                     Kind = kind,
                     IsElevated = proc.IsElevated,
                 };
-                if (kind == AppKind.Explorer)
+                if (detailed && kind == AppKind.Explorer)
                 {
                     folders ??= _explorer.GetOpenFolders();
                     if (folders.TryGetValue((long)r.Handle, out var f)) rec.ExplorerFolderPath = f;
@@ -128,13 +128,34 @@ public sealed class WindowManager : IWindowManager
             catch (Exception ex) { _log.Debug("Fenster", $"Fenster übersprungen: {ex.Message}"); }
         }
 
-        // auf allen Desktops angeheftete Fenster erkennen
-        if (_desktops.CanManage)
+        // auf allen Desktops angeheftete Fenster erkennen – eine COM-Runde statt einer je Fenster
+        if (_desktops.CanManage && result.Count > 0)
+        {
+            var pins = _desktops.GetWindowsPinned(result.Select(r => r.Handle).ToList());
             foreach (var rec in result)
-                rec.IsPinned = _desktops.IsWindowPinned(rec.Handle);
+                rec.IsPinned = pins.TryGetValue(rec.Handle, out var p) && p;
+        }
 
         ProcessInfo.Prune(result.Select(w => w.ProcessId).Concat(raw.Select(r => r.Pid)));
         return result;
+    }
+
+    private static void RefreshProcessNames()
+    {
+        var now = Environment.TickCount64;
+        if (now - _processNamesTick < 2000) return;
+        var names = new Dictionary<int, string>();
+        try
+        {
+            foreach (var p in Process.GetProcesses())
+            {
+                try { names[p.Id] = p.ProcessName; } catch { }
+                p.Dispose();
+            }
+        }
+        catch { }
+        _processNames = names;
+        _processNamesTick = now;
     }
 
     private bool TryGetCandidate(IntPtr h, int z, out RawWindow? raw)

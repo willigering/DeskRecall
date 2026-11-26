@@ -1,9 +1,14 @@
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 
 namespace DeskRecall.Views;
 
-/// <summary>Sanftes Auf- und Zuklappen über MaxHeight und Deckkraft (ca. 180 ms, EaseOut).</summary>
+/// <summary>
+/// Sanftes Auf- und Zuklappen über RenderTransform (ScaleY) und Deckkraft – ohne das Layout
+/// in jedem Animationsrahmen neu zu messen. Der Platz im Layout ändert sich nur beim Öffnen
+/// (einmal Visible) und am Ende des Schließens (Collapsed).
+/// </summary>
 public static class ExpandChrome
 {
     public static readonly DependencyProperty IsOpenProperty = DependencyProperty.RegisterAttached(
@@ -34,63 +39,75 @@ public static class ExpandChrome
         ApplyInstant(el, GetIsOpen(el));
     }
 
+    static ScaleTransform EnsureScale(FrameworkElement el)
+    {
+        if (el.RenderTransform is ScaleTransform s) return s;
+        s = new ScaleTransform(1, 1);
+        el.RenderTransform = s;
+        el.RenderTransformOrigin = new Point(0, 0);
+        return s;
+    }
+
+    static void StopAnimations(FrameworkElement el, ScaleTransform scale)
+    {
+        el.BeginAnimation(UIElement.OpacityProperty, null);
+        el.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+    }
+
     static void ApplyInstant(FrameworkElement el, bool open)
     {
-        el.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-        el.BeginAnimation(UIElement.OpacityProperty, null);
+        var scale = EnsureScale(el);
+        StopAnimations(el, scale);
         if (open)
         {
-            el.Visibility = Visibility.Visible;
             el.MaxHeight = double.PositiveInfinity;
+            el.Visibility = Visibility.Visible;
             el.Opacity = 1;
+            scale.ScaleY = 1;
         }
         else
         {
-            el.MaxHeight = 0;
             el.Opacity = 0;
+            scale.ScaleY = 0;
             el.Visibility = Visibility.Collapsed;
+            el.MaxHeight = 0;
         }
     }
 
     static void Animate(FrameworkElement el, bool open)
     {
-        el.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-        el.BeginAnimation(UIElement.OpacityProperty, null);
-        el.Visibility = Visibility.Visible;
-
-        double fromH, toH, fromO, toO;
-        if (open)
-        {
-            el.MaxHeight = double.PositiveInfinity;
-            el.Opacity = 1;
-            el.UpdateLayout();
-            var width = el.ActualWidth > 1 ? el.ActualWidth : 400;
-            el.Measure(new Size(width, double.PositiveInfinity));
-            toH = Math.Max(el.DesiredSize.Height, 1);
-            fromH = 0;
-            fromO = 0;
-            toO = 1;
-            // Lokale Werte = Endzustand, damit FillBehavior.Stop nicht auf 0 zurückspringt.
-            el.MaxHeight = double.PositiveInfinity;
-            el.Opacity = 1;
-        }
-        else
-        {
-            fromH = el.ActualHeight > 0 ? el.ActualHeight : el.DesiredSize.Height;
-            if (fromH <= 0) { ApplyInstant(el, false); return; }
-            toH = 0;
-            fromO = el.Opacity > 0 ? el.Opacity : 1;
-            toO = 0;
-            el.MaxHeight = 0;
-            el.Opacity = 0;
-        }
+        var scale = EnsureScale(el);
+        StopAnimations(el, scale);
 
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(180);
-        var hAnim = new DoubleAnimation(fromH, toH, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
-        var oAnim = new DoubleAnimation(fromO, toO, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
-        hAnim.Completed += (_, _) => ApplyInstant(el, open);
-        el.BeginAnimation(FrameworkElement.MaxHeightProperty, hAnim);
-        el.BeginAnimation(UIElement.OpacityProperty, oAnim);
+
+        if (open)
+        {
+            el.MaxHeight = double.PositiveInfinity;
+            el.Visibility = Visibility.Visible;
+            // Lokale Werte = Endzustand, damit FillBehavior.Stop nicht zurückspringt.
+            el.Opacity = 1;
+            scale.ScaleY = 1;
+            var fromO = 0d;
+            var oAnim = new DoubleAnimation(fromO, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+            var yAnim = new DoubleAnimation(0, 1, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+            oAnim.Completed += (_, _) => ApplyInstant(el, true);
+            el.BeginAnimation(UIElement.OpacityProperty, oAnim);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, yAnim);
+        }
+        else
+        {
+            var fromO = el.Opacity > 0 ? el.Opacity : 1;
+            var fromY = scale.ScaleY > 0 ? scale.ScaleY : 1;
+            el.Opacity = 0;
+            scale.ScaleY = 0;
+            var oAnim = new DoubleAnimation(fromO, 0, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+            var yAnim = new DoubleAnimation(fromY, 0, duration) { EasingFunction = ease, FillBehavior = FillBehavior.Stop };
+            oAnim.Completed += (_, _) => ApplyInstant(el, false);
+            el.BeginAnimation(UIElement.OpacityProperty, oAnim);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, yAnim);
+        }
     }
 }

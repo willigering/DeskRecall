@@ -55,6 +55,8 @@ internal sealed class FakeVirtualDesktops : IVirtualDesktopService
     public Guid? GetCurrentDesktopId() => Current;
     public Guid? GetWindowDesktopId(long hwnd) => WindowDesktop.TryGetValue(hwnd, out var g) ? g : null;
     public bool IsWindowPinned(long hwnd) => Pinned.Contains(hwnd);
+    public IReadOnlyDictionary<long, bool> GetWindowsPinned(IReadOnlyList<long> hwnds)
+        => hwnds.ToDictionary(h => h, h => Pinned.Contains(h));
     public bool MoveWindowToDesktop(long hwnd, Guid desktopId) { Calls.Add($"move {hwnd}->{Desktops.First(d => d.Id == desktopId).Index}"); WindowDesktop[hwnd] = desktopId; return true; }
     public bool SetWindowPinned(long hwnd, bool pinned) { if (pinned) Pinned.Add(hwnd); else Pinned.Remove(hwnd); return true; }
     public bool SwitchToDesktop(Guid desktopId) { Calls.Add($"switch {Desktops.First(d => d.Id == desktopId).Index}"); Current = desktopId; return true; }
@@ -73,7 +75,7 @@ internal sealed class FakeWindows : IWindowManager
     public List<WindowRecord> Live { get; } = new();
     public Dictionary<long, PlacementTarget> Applied { get; } = new();
     public List<long> Closed { get; } = new();
-    public IReadOnlyList<WindowRecord> EnumerateAppWindows() { lock (Live) return Live.Select(w => w.Clone()).ToList(); }
+    public IReadOnlyList<WindowRecord> EnumerateAppWindows(bool detailed = true) { lock (Live) return Live.Select(w => w.Clone()).ToList(); }
     public bool IsAlive(long hwnd) { lock (Live) return Live.Any(w => w.Handle == hwnd); }
     public RectI? GetWindowBounds(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.NormalBounds : null;
     public WindowShowState? GetState(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.State : WindowShowState.Normal;

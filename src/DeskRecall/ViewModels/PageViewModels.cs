@@ -409,6 +409,12 @@ public sealed class DiagnosticsViewModel : ObservableObject
         };
         if (_vd.LastError is not null) lines.Add($"Letzter Desktop-Fehler: {_vd.LastError}");
         if (!_compat.IsSupported) lines.Add("Hinweis: Diese Windows-Version wird nicht offiziell unterstützt (Windows 11 erforderlich).");
+        if (_controller.LastRefreshDuration > TimeSpan.Zero || _controller.LastRefreshWindowCount > 0)
+        {
+            var ms = _controller.LastRefreshDuration.TotalMilliseconds;
+            var skip = _controller.LastRefreshSkippedUi ? ", Oberfläche unverändert" : "";
+            lines.Add($"Letzte Aktualisierung: {ms:0} ms, {_controller.LastRefreshWindowCount} Fenster{skip}");
+        }
         Report = string.Join("\n", lines);
 
         var r = _controller.LastReport;

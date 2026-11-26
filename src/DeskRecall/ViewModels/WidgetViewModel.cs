@@ -20,6 +20,8 @@ public sealed class AppRowViewModel : ObservableObject
     private string _title = "";
     private int _windowCount = 1;
     private bool _isWindowsExpanded;
+    private bool _lastRunning, _lastMinimized;
+    private long _lastPrimaryHandle;
 
     public required string AppKey { get; init; }
     public required string AppName { get; init; }
@@ -49,16 +51,27 @@ public sealed class AppRowViewModel : ObservableObject
         : $"{AppName} – {Windows.Count} Fenster\n" + string.Join("\n", Windows.Take(8).Select(w => "• " + w.DisplayTitle));
     public void SyncWindowItems()
     {
+        var listChanged = false;
         for (var i = 0; i < Windows.Count; i++)
         {
-            if (i < WindowItems.Count) WindowItems[i] = Windows[i];
-            else WindowItems.Add(Windows[i]);
+            if (i < WindowItems.Count)
+            {
+                var a = WindowItems[i]; var b = Windows[i];
+                if (a.Handle == b.Handle && a.Title == b.Title && a.State == b.State) continue;
+                WindowItems[i] = b;
+                listChanged = true;
+            }
+            else { WindowItems.Add(Windows[i]); listChanged = true; }
         }
-        while (WindowItems.Count > Windows.Count) WindowItems.RemoveAt(WindowItems.Count - 1);
-        OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsMinimized));
-        OnPropertyChanged(nameof(ToolTipText));
-        OnPropertyChanged(nameof(PrimaryHandle));
+        while (WindowItems.Count > Windows.Count) { WindowItems.RemoveAt(WindowItems.Count - 1); listChanged = true; }
+
+        var running = IsRunning;
+        var minimized = IsMinimized;
+        var handle = PrimaryHandle;
+        if (running != _lastRunning) { _lastRunning = running; OnPropertyChanged(nameof(IsRunning)); }
+        if (minimized != _lastMinimized) { _lastMinimized = minimized; OnPropertyChanged(nameof(IsMinimized)); }
+        if (handle != _lastPrimaryHandle) { _lastPrimaryHandle = handle; OnPropertyChanged(nameof(PrimaryHandle)); }
+        if (listChanged) OnPropertyChanged(nameof(ToolTipText));
         IsWindowsExpanded = AppRowInput.ShouldKeepExpanded(WindowCount, IsWindowsExpanded);
     }
 }
@@ -85,7 +98,17 @@ public sealed class DesktopCardViewModel : ObservableObject
     public int AppCount => Apps.Count;
     public bool IsEmpty => Apps.Count == 0;
     public bool HasArrangement => Apps.Any(a => a.IsRunning);
-    public void NotifyApps() { OnPropertyChanged(nameof(AppCount)); OnPropertyChanged(nameof(IsEmpty)); OnPropertyChanged(nameof(HasArrangement)); }
+    private int _notifiedAppCount = int.MinValue;
+    private bool _notifiedEmpty = true, _notifiedArrangement;
+    public void NotifyApps()
+    {
+        var count = Apps.Count;
+        var empty = count == 0;
+        var has = Apps.Any(a => a.IsRunning);
+        if (count != _notifiedAppCount) { _notifiedAppCount = count; OnPropertyChanged(nameof(AppCount)); }
+        if (empty != _notifiedEmpty) { _notifiedEmpty = empty; OnPropertyChanged(nameof(IsEmpty)); }
+        if (has != _notifiedArrangement) { _notifiedArrangement = has; OnPropertyChanged(nameof(HasArrangement)); }
+    }
 }
 
 public sealed class HistoryItemViewModel
@@ -258,6 +281,13 @@ public sealed class WidgetViewModel : ObservableObject
         if (state is null) return;
         var collapsed = _settings.Current.Widget.CollapsedCards.ToHashSet();
         var desktops = state.Desktops.Count > 0 ? state.Desktops : new[] { new DesktopInfo { Id = Guid.Empty, Index = 0, Name = "Desktop 1" } };
+        var byDesktop = desktops.ToDictionary(d => d.Id, _ => new List<WindowRecord>());
+        var activeId = state.CurrentDesktopId ?? desktops[0].Id;
+        foreach (var w in state.Windows)
+        {
+            var id = state.Desktops.Count == 0 ? desktops[0].Id : (w.IsPinned ? activeId : w.DesktopId);
+            if (byDesktop.TryGetValue(id, out var list)) list.Add(w);
+        }
 
         // Karten anhand der Desktop-ID abgleichen (Aufklapp-/Bearbeitungszustand bleibt erhalten)
         for (var i = 0; i < desktops.Count; i++)
@@ -276,9 +306,8 @@ public sealed class WidgetViewModel : ObservableObject
             }
             card.Index = i;
             if (!card.IsEditing) card.Name = d.Name;
-            card.IsActive = state.CurrentDesktopId is { } cur ? d.Id == cur : i == 0;
-            var wins = state.Windows.Where(w => state.Desktops.Count == 0 || (w.IsPinned ? card.IsActive : w.DesktopId == d.Id)).ToList(); // angeheftete Fenster beim aktiven Desktop zeigen
-            SyncApps(card, wins);
+            card.IsActive = d.Id == activeId;
+            SyncApps(card, byDesktop[d.Id]);
         }
         while (Cards.Count > desktops.Count) Cards.RemoveAt(Cards.Count - 1);
         OnPropertyChanged(nameof(ActiveCard));

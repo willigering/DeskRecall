@@ -51,8 +51,11 @@
                     </Grid>
                 </Border>
                 <Border x:Name="SubHost" Margin="27,0,0,0" ClipToBounds="True"
-                        MaxHeight="0" Opacity="0" Visibility="Collapsed"
+                        Opacity="0" Visibility="Collapsed" RenderTransformOrigin="0,0"
                         ui:ExpandChrome.IsOpen="{Binding IsWindowsExpanded}">
+                    <Border.RenderTransform>
+                        <ScaleTransform ScaleY="0" />
+                    </Border.RenderTransform>
                     <ItemsControl ItemsSource="{Binding WindowItems}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type m:WindowRecord}">
@@ -286,8 +289,15 @@
                 </StackPanel>
 
                 <!-- Desktop-Karten -->
-                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,2,0" Margin="0,0,-4,0">
-                    <ItemsControl x:Name="CardsList" ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource CardTemplate}" Margin="0,2,4,0" Focusable="False" />
+                <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False" Padding="0,0,2,0" Margin="0,0,-4,0" CanContentScroll="True">
+                    <ItemsControl x:Name="CardsList" ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource CardTemplate}" Margin="0,2,4,0" Focusable="False"
+                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
                 </ScrollViewer>
 
                 <!-- Aktionen -->
