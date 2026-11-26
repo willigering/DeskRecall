@@ -86,7 +86,7 @@ public class SessionSerializationTests
     {
         SessionSnapshot Make(string title, long handle, int x, int desk) => new()
         {
-            CreatedAt = DateTimeOffset.Now.AddMinutes(handle),
+            CreatedAt = new DateTimeOffset(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1)).AddMinutes(handle),
             Windows = { T.W("firefox", title, desk, RectI.FromSize(x, 0, 800, 600), handle: handle) },
         };
         var a = SessionHasher.Compute(Make("Tab A", 1, 0, 0));
@@ -106,6 +106,9 @@ public class SessionSerializationTests
 
 public class SessionStoreTests
 {
+    static readonly DateTimeOffset T0 = new(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1));
+    static long _stamp;
+
     private static (SessionStore store, AppDataPaths paths) Create(int max = 5)
     {
         var paths = new AppDataPaths(T.TempDir());
@@ -115,7 +118,7 @@ public class SessionStoreTests
 
     private static SessionSnapshot Snap(int x, SessionKind kind = SessionKind.Auto, DateTimeOffset? at = null) => new()
     {
-        Kind = kind, CreatedAt = at ?? DateTimeOffset.Now,
+        Kind = kind, CreatedAt = at ?? T0.AddMilliseconds(Interlocked.Increment(ref _stamp)),
         Windows = { T.W("code", "x", 0, RectI.FromSize(x, 0, 500, 500)) },
     };
 
@@ -143,11 +146,21 @@ public class SessionStoreTests
     }
 
     [Fact]
+    public void Two_saves_in_the_same_millisecond_both_appear_in_history()
+    {
+        var (store, _) = Create();
+        var t = T0;
+        Assert.Equal(SaveOutcome.Saved, store.Save(Snap(10, at: t)));
+        Assert.Equal(SaveOutcome.Saved, store.Save(Snap(20, at: t)));
+        Assert.Equal(2, store.GetHistory().Count);
+    }
+
+    [Fact]
     public void Manual_snapshots_are_always_saved()
     {
         var (store, _) = Create();
         store.Save(Snap(10));
-        Assert.Equal(SaveOutcome.Saved, store.Save(Snap(10, SessionKind.Manual, DateTimeOffset.Now.AddSeconds(1))));
+        Assert.Equal(SaveOutcome.Saved, store.Save(Snap(10, SessionKind.Manual, T0.AddSeconds(1))));
         Assert.Equal(2, store.GetHistory().Count);
     }
 
@@ -164,7 +177,7 @@ public class SessionStoreTests
     public void History_is_limited_to_max_entries_newest_first()
     {
         var (store, _) = Create(max: 3);
-        var t0 = DateTimeOffset.Now.AddHours(-1);
+        var t0 = T0.AddHours(-1);
         for (var i = 0; i < 6; i++) store.Save(Snap(i * 10, at: t0.AddMinutes(i)));
         var h = store.GetHistory();
         Assert.Equal(3, h.Count);
@@ -176,8 +189,8 @@ public class SessionStoreTests
     public void Corrupt_last_session_falls_back_to_backup_or_history()
     {
         var (store, paths) = Create();
-        store.Save(Snap(10, at: DateTimeOffset.Now.AddMinutes(-2)));
-        store.Save(Snap(20, at: DateTimeOffset.Now.AddMinutes(-1)));
+        store.Save(Snap(10, at: T0.AddMinutes(-2)));
+        store.Save(Snap(20, at: T0.AddMinutes(-1)));
         File.WriteAllText(paths.LastSessionFile, "{\"schemaVersion\": 1, \"windows\": [ {\"processName\": ");
         Assert.Equal(10, new SessionStore(paths, new MemoryLogService()).LoadLast()!.Windows[0].NormalBounds.Left); // .bak
         File.Delete(paths.LastSessionFile + ".bak");
@@ -188,7 +201,7 @@ public class SessionStoreTests
     public void Protected_entries_survive_retention()
     {
         var (store, _) = Create(max: 2);
-        var t0 = DateTimeOffset.Now.AddHours(-1);
+        var t0 = T0.AddHours(-1);
         store.Save(Snap(1, at: t0));
         var first = store.GetHistory()[0].FilePath;
         store.Protect(first);
@@ -199,8 +212,9 @@ public class SessionStoreTests
 
 public class HistoryRetentionTests
 {
+    static readonly DateTimeOffset T0 = new(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1));
     private static HistoryEntry E(int minutesAgo, SessionKind kind) =>
-        new($"/h/{minutesAgo}.json", DateTimeOffset.Now.AddMinutes(-minutesAgo), kind, 1, 1, 1, null);
+        new($"/h/{minutesAgo}.json", T0.AddMinutes(-minutesAgo), kind, 1, 1, 1, null);
 
     [Fact]
     public void Deletes_oldest_automatic_first_and_keeps_manual()

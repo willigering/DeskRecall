@@ -120,15 +120,16 @@ public sealed class ChangeDebouncer : IDisposable
     private readonly TimeSpan _quiet;
     private readonly TimeSpan _maxDelay;
     private readonly Action _callback;
-    private readonly Timer _timer;
+    private readonly IClock _clock;
     private readonly object _lock = new();
     private DateTimeOffset? _firstSignal;
+    private IDisposable? _pending;
     private bool _disposed;
 
-    public ChangeDebouncer(TimeSpan quiet, TimeSpan maxDelay, Action callback)
+    public ChangeDebouncer(TimeSpan quiet, TimeSpan maxDelay, Action callback, IClock? clock = null)
     {
         _quiet = quiet; _maxDelay = maxDelay; _callback = callback;
-        _timer = new Timer(_ => Fire(), null, Timeout.Infinite, Timeout.Infinite);
+        _clock = clock ?? SystemClock.Instance;
     }
 
     public void Signal()
@@ -136,24 +137,34 @@ public sealed class ChangeDebouncer : IDisposable
         lock (_lock)
         {
             if (_disposed) return;
-            var now = DateTimeOffset.UtcNow;
+            var now = _clock.Now;
             _firstSignal ??= now;
             var due = _quiet;
             var forced = _firstSignal.Value + _maxDelay - now;
             if (forced < due) due = forced < TimeSpan.Zero ? TimeSpan.Zero : forced;
-            _timer.Change(due, Timeout.InfiniteTimeSpan);
+            _pending?.Dispose();
+            _pending = _clock.Schedule(due, Fire);
         }
     }
 
     private void Fire()
     {
-        lock (_lock) { if (_disposed) return; _firstSignal = null; }
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _firstSignal = null;
+            _pending = null;
+        }
         try { _callback(); } catch { }
     }
 
     public void Dispose()
     {
-        lock (_lock) { _disposed = true; }
-        _timer.Dispose();
+        lock (_lock)
+        {
+            _disposed = true;
+            _pending?.Dispose();
+            _pending = null;
+        }
     }
 }

@@ -118,13 +118,26 @@ internal sealed class FakeMonitors : IMonitorManager
 /// <summary>Virtuelle Uhr: Delay schaltet die Zeit weiter und führt fällige Termine aus, ohne echte Wartezeit.</summary>
 internal sealed class FakeClock : DeskRecall.Core.Abstractions.IClock
 {
-    readonly List<(DateTimeOffset Due, Action Action)> _scheduled = new();
+    readonly List<Work> _scheduled = new();
     TaskCompletionSource? _paused;
     TaskCompletionSource? _resume;
 
     public DateTimeOffset Now { get; private set; } = new(2026, 11, 25, 12, 0, 0, TimeSpan.FromHours(1));
 
-    public void Schedule(TimeSpan delay, Action action) => _scheduled.Add((Now + delay, action));
+    public IDisposable Schedule(TimeSpan delay, Action action)
+    {
+        var work = new Work(Now + delay, action);
+        _scheduled.Add(work);
+        return work;
+    }
+
+    sealed class Work(DateTimeOffset due, Action action) : IDisposable
+    {
+        public DateTimeOffset Due { get; } = due;
+        public Action Action { get; } = action;
+        public bool Canceled { get; private set; }
+        public void Dispose() => Canceled = true;
+    }
 
     /// <summary>Nächstes Delay hält an, bis <see cref="Resume"/> kommt – für Tests auf gleichzeitige Aufrufe.</summary>
     public void Pause()
@@ -162,6 +175,7 @@ internal sealed class FakeClock : DeskRecall.Core.Abstractions.IClock
     public void Advance(TimeSpan delay)
     {
         var target = Now + delay;
+        _scheduled.RemoveAll(w => w.Canceled);
         while (_scheduled.Count > 0)
         {
             var next = 0;
@@ -170,6 +184,7 @@ internal sealed class FakeClock : DeskRecall.Core.Abstractions.IClock
             if (_scheduled[next].Due > target) break;
             var item = _scheduled[next];
             _scheduled.RemoveAt(next);
+            if (item.Canceled) continue;
             Now = item.Due;
             item.Action();
         }
