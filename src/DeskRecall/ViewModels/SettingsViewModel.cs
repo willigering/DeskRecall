@@ -12,6 +12,7 @@ using DeskRecall.Core.Profiles;
 using DeskRecall.Core.Restore;
 using DeskRecall.Core.Rules;
 using DeskRecall.Core.Settings;
+using DeskRecall.Core.Update;
 using DeskRecall.Core.Storage;
 using DeskRecall.Platform.Services;
 using DeskRecall.Platform.VirtualDesktops;
@@ -37,11 +38,13 @@ public sealed class SettingsViewModel : ObservableObject
     private NavItem _selectedPage;
 
     public SettingsViewModel(ISettingsService settings, AutostartService autostart, RulesViewModel rules, ProfilesViewModel profiles,
-        HistoryViewModel history, DiagnosticsViewModel diagnostics, AppController controller, IMonitorManager monitors, IVirtualDesktopService vd, ISessionStore store)
+        HistoryViewModel history, DiagnosticsViewModel diagnostics, AppController controller, IMonitorManager monitors, IVirtualDesktopService vd, ISessionStore store,
+        UpdateController updates)
     {
         _settings = settings; _autostart = autostart; _store = store;
         Rules = rules; Profiles = profiles; History = history; Diagnostics = diagnostics;
         _controller = controller; _monitors = monitors; _vd = vd;
+        Updates = updates;
         _commitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _commitTimer.Tick += (_, _) => { _commitTimer.Stop(); _settings.Update(_ => { }); };
         Pages = new()
@@ -79,9 +82,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     private AppSettings S => _settings.Current;
 
-    private void Commit([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    private void Commit([System.Runtime.CompilerServices.CallerMemberName] string? name = null, bool preview = false)
     {
         OnPropertyChanged(name);
+        if (preview) _settings.NotifyPreview();
         _commitTimer.Stop();
         _commitTimer.Start();
     }
@@ -148,8 +152,36 @@ public sealed class SettingsViewModel : ObservableObject
 
     public WidgetDock Dock { get => S.Widget.Dock; set { S.Widget.Dock = value; Commit(); } }
     public WidgetDisplayMode DisplayMode { get => S.Widget.Mode; set { S.Widget.Mode = value; Commit(); } }
-    public int WidgetWidth { get => S.Widget.ExpandedWidth; set { S.Widget.ExpandedWidth = value; Commit(); } }
-    public int Opacity { get => S.Widget.OpacityPercent; set { S.Widget.OpacityPercent = value; Commit(); } }
+    public WidgetWidthPreset WidthPreset
+    {
+        get => WidgetAppearance.FromPixels(S.Widget.ExpandedWidth);
+        set
+        {
+            S.Widget.ExpandedWidth = WidgetAppearance.ToPixels(value);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(WidthNarrow));
+            OnPropertyChanged(nameof(WidthNormal));
+            OnPropertyChanged(nameof(WidthWide));
+            Commit(nameof(WidthPreset), preview: true);
+        }
+    }
+    public bool WidthNarrow { get => WidthPreset == WidgetWidthPreset.Narrow; set { if (value) WidthPreset = WidgetWidthPreset.Narrow; else OnPropertyChanged(); } }
+    public bool WidthNormal { get => WidthPreset == WidgetWidthPreset.Normal; set { if (value) WidthPreset = WidgetWidthPreset.Normal; else OnPropertyChanged(); } }
+    public bool WidthWide { get => WidthPreset == WidgetWidthPreset.Wide; set { if (value) WidthPreset = WidgetWidthPreset.Wide; else OnPropertyChanged(); } }
+    public int Opacity { get => S.Widget.OpacityPercent; set { S.Widget.OpacityPercent = value; Commit(preview: true); } }
+    public bool CheckUpdates { get => S.Update.CheckAutomatically; set { S.Update.CheckAutomatically = value; Commit(); } }
+    public string FeedUrl
+    {
+        get => string.IsNullOrWhiteSpace(S.Update.FeedUrl) ? UpdateService.DefaultFeedUrl : S.Update.FeedUrl;
+        set
+        {
+            var v = (value ?? "").Trim();
+            S.Update.FeedUrl = string.Equals(v, UpdateService.DefaultFeedUrl, StringComparison.OrdinalIgnoreCase) ? "" : v;
+            Commit();
+        }
+    }
+    public UpdateController Updates { get; }
+    public string DefaultFeedUrl => UpdateService.DefaultFeedUrl;
     public FullscreenBehavior Fullscreen { get => S.Widget.Fullscreen; set { S.Widget.Fullscreen = value; Commit(); } }
     public bool AlwaysOnTop { get => S.Widget.AlwaysOnTop; set { S.Widget.AlwaysOnTop = value; Commit(); } }
 
@@ -191,9 +223,9 @@ public sealed class SettingsViewModel : ObservableObject
 
     // ---------------------------------------------------------------- Erscheinungsbild
 
-    public bool Acrylic { get => S.Widget.Acrylic; set { S.Widget.Acrylic = value; Commit(); } }
+    public bool Acrylic { get => S.Widget.Acrylic; set { S.Widget.Acrylic = value; Commit(preview: true); } }
     public bool Animations { get => S.Widget.Animations; set { S.Widget.Animations = value; Commit(); } }
-    public int Scale { get => S.Widget.ScalePercent; set { S.Widget.ScalePercent = value; Commit(); } }
+    public int Scale { get => S.Widget.ScalePercent; set { S.Widget.ScalePercent = value; Commit(preview: true); } }
 
     // ---------------------------------------------------------------- Virtuelle Desktops
 

@@ -70,6 +70,48 @@
                                 </StackPanel>
                             </CheckBox>
                         </Border>
+                        <TextBlock Text="Aktualisierungen" Style="{StaticResource SectionText}" />
+                        <Border Style="{StaticResource SettingsCard}">
+                            <CheckBox Style="{StaticResource ToggleSwitch}" IsChecked="{Binding CheckUpdates}">
+                                <StackPanel>
+                                    <TextBlock Text="Automatisch nach Updates suchen" />
+                                    <TextBlock Text="Beim Start und etwa alle sechs Stunden. Es wird kein Zugriffstoken gesendet; der Feed muss öffentlich erreichbar sein." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Jetzt suchen" />
+                                    <TextBlock Text="{Binding Updates.StatusText}" Style="{StaticResource DimText}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Jetzt suchen" Command="{Binding Updates.CheckNowCommand}" MinWidth="140" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}" Visibility="{Binding Updates.HasUpdate, Converter={StaticResource BoolToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="{Binding Updates.NoticeText}" FontWeight="SemiBold" />
+                                    <TextBlock Text="Ihre Sitzungsdaten bleiben beim Aktualisieren erhalten." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource PrimaryButton}" Content="Jetzt aktualisieren" Command="{Binding Updates.InstallCommand}" MinWidth="160" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <Border Style="{StaticResource SettingsCard}">
+                            <StackPanel>
+                                <TextBlock Text="Update-Feed (optional)" />
+                                <TextBlock Text="Standard ist die öffentliche GitHub-Release-API dieses Projekts. Nur ändern, wenn die Releases unter einer anderen öffentlichen Adresse liegen." Style="{StaticResource DimText}" Margin="0,2,0,8" TextWrapping="Wrap" />
+                                <TextBox Text="{Binding FeedUrl, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                        </Border>
                         <TextBlock Text="Widget-Verhalten" Style="{StaticResource SectionText}" />
                         <Border Style="{StaticResource SettingsCard}">
                             <Grid>
@@ -102,13 +144,18 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
-                                    <ColumnDefinition Width="64" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Breite" />
+                                    <TextBlock Text="Schmal, Normal oder Breit – die Größe wechselt ruhig, ohne zu ruckeln." Style="{StaticResource DimText}" Margin="0,2,0,0" />
                                 </StackPanel>
-                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="260" Maximum="400" TickFrequency="4" IsSnapToTickEnabled="True" Value="{Binding WidgetWidth}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Text="{Binding WidgetWidth, StringFormat='{}{0} px'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                                <Border Grid.Column="1" Height="32" Width="220" VerticalAlignment="Center" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Background="{StaticResource CardBrush}">
+                                    <UniformGrid Columns="3">
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Schmal" IsChecked="{Binding WidthNarrow, Mode=TwoWay}" GroupName="WidgetWidthGeneral" ToolTip="280 Pixel" />
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Normal" IsChecked="{Binding WidthNormal, Mode=TwoWay}" GroupName="WidgetWidthGeneral" ToolTip="300 Pixel" />
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Breit" IsChecked="{Binding WidthWide, Mode=TwoWay}" GroupName="WidgetWidthGeneral" ToolTip="320 Pixel" />
+                                    </UniformGrid>
+                                </Border>
                             </Grid>
                         </Border>
                         <Border Style="{StaticResource SettingsCard}">
@@ -120,7 +167,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Transparenz" />
-                                    <TextBlock Text="Deckkraft des Widget-Hintergrunds." Style="{StaticResource DimText}" Margin="0,2,0,0" />
+                                    <TextBlock Text="Deckkraft des Hintergrunds. Schrift und Symbole bleiben lesbar. Die Änderung wirkt sofort." Style="{StaticResource DimText}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="30" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Opacity}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat='{}{0} %'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
@@ -531,13 +578,18 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
-                                    <ColumnDefinition Width="64" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Breite" />
+                                    <TextBlock Text="Schmal, Normal oder Breit – die Größe wechselt ruhig, ohne zu ruckeln." Style="{StaticResource DimText}" Margin="0,2,0,0" />
                                 </StackPanel>
-                                <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="260" Maximum="400" TickFrequency="4" IsSnapToTickEnabled="True" Value="{Binding WidgetWidth}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Text="{Binding WidgetWidth, StringFormat='{}{0} px'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />
+                                <Border Grid.Column="1" Height="32" Width="220" VerticalAlignment="Center" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Background="{StaticResource CardBrush}">
+                                    <UniformGrid Columns="3">
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Schmal" IsChecked="{Binding WidthNarrow, Mode=TwoWay}" GroupName="WidgetWidthAppearance" ToolTip="280 Pixel" />
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Normal" IsChecked="{Binding WidthNormal, Mode=TwoWay}" GroupName="WidgetWidthAppearance" ToolTip="300 Pixel" />
+                                        <RadioButton Style="{StaticResource SegmentButton}" Content="Breit" IsChecked="{Binding WidthWide, Mode=TwoWay}" GroupName="WidgetWidthAppearance" ToolTip="320 Pixel" />
+                                    </UniformGrid>
+                                </Border>
                             </Grid>
                         </Border>
                         <Border Style="{StaticResource SettingsCard}">
@@ -549,6 +601,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Transparenz" />
+                                    <TextBlock Text="Deckkraft des Hintergrunds. Schrift und Symbole bleiben lesbar." Style="{StaticResource DimText}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <Slider Grid.Column="1" Style="{StaticResource LilacSlider}" Minimum="30" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding Opacity}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="2" Text="{Binding Opacity, StringFormat='{}{0} %'}" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource TextDimBrush}" />

@@ -15,6 +15,7 @@ public sealed class WindowRecord
     public string? DisplayName { get; set; }
     public string WindowClass { get; set; } = "";
     public string Title { get; set; } = "";
+    public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "(ohne Titel)" : Title.Trim();
 
     /// <summary>HWND zum Zeitpunkt der Erfassung (nach Neustart ungültig, nur für Live-Abgleich).</summary>
     public long Handle { get; set; }

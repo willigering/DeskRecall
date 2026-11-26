@@ -3,7 +3,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Settings;
 using DeskRecall.Services;
@@ -32,6 +34,13 @@ public partial class WidgetWindow : Window
     private bool _acrylicActive;
     private Point _dragStart;
     private AppRowViewModel? _dragRow;
+    private bool _suppressRenameClicks;
+    private DispatcherTimer? _pendingSwitch;
+    private DesktopCardViewModel? _pendingSwitchCard;
+    private int _appliedOpacity = -1;
+    private bool _appliedAcrylicWanted;
+    private uint _appliedTint;
+    private bool _sizeInitialized;
 
     public event Action? SettingsRequested;
 
@@ -42,6 +51,7 @@ public partial class WidgetWindow : Window
         DataContext = vm;
         _hideTimer.Tick += (_, _) => { _hideTimer.Stop(); if (!IsMouseOver && !IsAnyPopupOpen()) ApplyPresentation(Presentation.Edge); };
         _settings.Changed += _ => Dispatcher.BeginInvoke(ApplySettings);
+        _settings.Previewed += _ => Dispatcher.BeginInvoke(PreviewAppearance);
         _controller.FullscreenChanged += OnFullscreenChanged;
         SourceInitialized += OnSourceInitialized;
         _vm.PropertyChanged += (_, e) =>
@@ -50,6 +60,7 @@ public partial class WidgetWindow : Window
             if (e.PropertyName == nameof(WidgetViewModel.IsStatusOpen)) StatusChevron.Text = _vm.IsStatusOpen ? "\uE70E" : "\uE70D";
         };
         IsVisibleChanged += (_, _) => { _controller.UiActive = IsVisible && !_hiddenForFullscreen; if (IsVisible) _controller.MarkDirty(); };
+        PreviewMouseLeftButtonDown += Root_PreviewMouseLeftButtonDown;
     }
 
     public bool IsWidgetVisible => IsVisible;
@@ -103,26 +114,41 @@ public partial class WidgetWindow : Window
         ApplyPresentation(target);
     }
 
-    private void ApplyBackground()
+    public void PreviewAppearance()
+    {
+        ApplyBackground(forceAcrylic: false);
+        PositionWindow();
+    }
+
+    private void ApplyBackground(bool forceAcrylic = false)
     {
         var w = _settings.Current.Widget;
-        var alpha = (byte)Math.Round(Math.Clamp(w.OpacityPercent, 30, 100) * 2.55);
-        _acrylicActive = false;
-        if (w.Acrylic && _hwnd != IntPtr.Zero && _presentation != Presentation.Edge)
-        {
-            // Tönung im Format AABBGGRR – Anthrazit #1E1B26
-            var tint = ((uint)Math.Max(0x50, alpha - 0x30) << 24) | (0x26u << 16) | (0x1Bu << 8) | 0x1Eu;
-            _acrylicActive = EnableAcrylic(_hwnd, tint);
-        }
-        else if (_hwnd != IntPtr.Zero) DisableAcrylic(_hwnd);
+        var wantAcrylic = w.Acrylic && _hwnd != IntPtr.Zero && _presentation != Presentation.Edge;
+        var tint = WidgetAppearance.AcrylicTintAbgr(w.OpacityPercent);
 
-        // Mit Acryl darf die WPF-Fläche transparenter sein, ohne Acryl trägt sie die Deckkraft allein.
-        var panelAlpha = _acrylicActive ? (byte)Math.Max(0x40, alpha - 0x50) : alpha;
-        var brush = new SolidColorBrush(Color.FromArgb(panelAlpha, 0x1E, 0x1B, 0x26));
-        brush.Freeze();
-        ExpandedPanel.Background = brush;
-        StripPanel.Background = brush;
-        UpdateRegion();
+        if (wantAcrylic)
+        {
+            if (forceAcrylic || !_acrylicActive || _appliedTint != tint || !_appliedAcrylicWanted)
+                _acrylicActive = EnableAcrylic(_hwnd, tint);
+        }
+        else if (_hwnd != IntPtr.Zero && (_acrylicActive || forceAcrylic))
+        {
+            DisableAcrylic(_hwnd);
+            _acrylicActive = false;
+        }
+        _appliedAcrylicWanted = wantAcrylic;
+        _appliedTint = tint;
+
+        if (_appliedOpacity != w.OpacityPercent || forceAcrylic)
+        {
+            var panelAlpha = WidgetAppearance.PanelAlpha(w.OpacityPercent, _acrylicActive);
+            var brush = new SolidColorBrush(Color.FromArgb(panelAlpha, 0x1E, 0x1B, 0x26));
+            brush.Freeze();
+            ExpandedPanel.Background = brush;
+            StripPanel.Background = brush;
+            _appliedOpacity = w.OpacityPercent;
+        }
+        // Region nur bei Größenwechsel – nicht bei jedem Transparenz-Tick.
     }
 
     private void ApplyPresentation(Presentation p)
@@ -155,8 +181,40 @@ public partial class WidgetWindow : Window
             : Math.Min(work.Height - 2 * margin, MeasureStripHeight());
         var left = w.Dock == WidgetDock.Right ? work.Right - width - (_presentation == Presentation.Edge ? 0 : margin) : work.Left + (_presentation == Presentation.Edge ? 0 : margin);
         var top = _presentation == Presentation.Strip ? work.Top + (work.Height - height) / 2 : work.Top + margin;
-        Width = width; Height = height; Left = left; Top = top;
-        UpdateRegion();
+        var animate = w.Animations && _sizeInitialized && _presentation == Presentation.Expanded
+                      && (Math.Abs(Width - width) > 0.5 || Math.Abs(Left - left) > 0.5);
+        if (animate)
+        {
+            AnimateLayout(width, height, left, top);
+        }
+        else
+        {
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+            BeginAnimation(TopProperty, null);
+            Width = width; Height = height; Left = left; Top = top;
+            UpdateRegion();
+        }
+        _sizeInitialized = true;
+    }
+
+    private void AnimateLayout(double width, double height, double left, double top)
+    {
+        void Run(DependencyProperty dp, double to, Action? done = null)
+        {
+            var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop,
+            };
+            anim.Completed += (_, _) => { SetValue(dp, to); done?.Invoke(); };
+            BeginAnimation(dp, anim);
+        }
+        Run(WidthProperty, width);
+        Run(HeightProperty, height);
+        Run(LeftProperty, left);
+        Run(TopProperty, top, UpdateRegion);
     }
 
     private double MeasureStripHeight()
@@ -290,25 +348,126 @@ public partial class WidgetWindow : Window
         if (_settings.Current.Widget.Mode == WidgetDisplayMode.AutoHide) ApplyPresentation(Presentation.Expanded);
     }
 
+
+    /// <summary>
+    /// WS_EX_NOACTIVATE: LostFocus feuert oft nicht. Ein Klick außerhalb des Umbenennen-Feldes übernimmt den Namen.
+    /// </summary>
+    private void Root_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_suppressRenameClicks) return;
+        if (!_vm.Cards.Any(c => c.IsEditing)) return;
+        if (e.OriginalSource is DependencyObject d && FindParent<TextBox>(d, tb => tb.Name == "RenameBox") is not null) return;
+        foreach (var c in _vm.Cards.Where(c => c.IsEditing).ToList())
+            _vm.CommitRenameCommand.Execute(c);
+    }
+
     // ------------------------------------------------------------ Karten
 
     private static T? Ctx<T>(object sender) where T : class => (sender as FrameworkElement)?.DataContext as T;
 
     private void CardHeader_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (Ctx<DesktopCardViewModel>(sender) is not { } card || card.IsEditing) return;
-        if (e.OriginalSource is DependencyObject d && FindParent<Button>(d) is not null) return;
-        _vm.SwitchDesktopCommand.Execute(card);
+        if (_suppressRenameClicks) return;
+        if (Ctx<DesktopCardViewModel>(sender) is not { } card) return;
+        var src = e.OriginalSource as DependencyObject;
+        var onBox = src is not null && FindParent<TextBox>(src) is not null;
+        var onButton = src is not null && FindParent<Button>(src) is not null;
+        var onName = src is not null && FindParent<TextBlock>(src, tb => tb.Name == "NameLabel") is not null;
+        var action = onName
+            ? DesktopCardInput.OnNameClick(card.IsEditing, isDoubleClick: false, onBox, onButton)
+            : DesktopCardInput.OnHeaderChromeClick(card.IsEditing, onBox, onButton);
+        if (action == DesktopCardInput.HeaderAction.None) return;
+        if (action == DesktopCardInput.HeaderAction.CommitRename)
+        {
+            CancelPendingSwitch();
+            _vm.CommitRenameCommand.Execute(card);
+            e.Handled = true;
+            return;
+        }
+        if (action == DesktopCardInput.HeaderAction.Switch)
+        {
+            if (onName) ScheduleSwitch(card);
+            else { CancelPendingSwitch(); _vm.SwitchDesktopCommand.Execute(card); }
+            e.Handled = true;
+        }
     }
 
     protected override void OnPreviewMouseDoubleClick(MouseButtonEventArgs e)
     {
         base.OnPreviewMouseDoubleClick(e);
-        if (e.OriginalSource is DependencyObject d && FindParent<Grid>(d, g => g.Name == "CardHeader") is { DataContext: DesktopCardViewModel card })
+        if (e.OriginalSource is not DependencyObject d) return;
+        if (FindParent<Grid>(d, g => g.Name == "CardHeader") is not { DataContext: DesktopCardViewModel card }) return;
+        var onButton = FindParent<Button>(d) is not null;
+        var onBox = FindParent<TextBox>(d) is not null;
+        var action = DesktopCardInput.OnNameClick(card.IsEditing, isDoubleClick: true, onBox, onButton);
+        if (action != DesktopCardInput.HeaderAction.BeginRename) return;
+        CancelPendingSwitch();
+        BeginRenameLikeContextMenu(card);
+        e.Handled = true;
+    }
+
+    /// <summary>Gleicher Fokus-Pfad wie das Kontextmenü „Umbenennen“: Fenster kurz aktivieren, dann Tastaturfokus und alles auswählen.</summary>
+    private void BeginRenameLikeContextMenu(DesktopCardViewModel card)
+    {
+        _suppressRenameClicks = true;
+        _vm.BeginRenameCommand.Execute(card);
+        Dispatcher.BeginInvoke(() =>
         {
-            _vm.BeginRenameCommand.Execute(card);
-            e.Handled = true;
+            try { FocusRenameBox(); }
+            finally { _suppressRenameClicks = false; }
+        }, DispatcherPriority.Input);
+    }
+
+    private void FocusRenameBox()
+    {
+        EnterKeyboardMode();
+        TextBox? box = null;
+        foreach (var tb in FindRenameBoxes(this))
+            if (tb.IsVisible && tb.Name == "RenameBox") { box = tb; break; }
+        if (box is null) return;
+        box.Focusable = true;
+        box.Focus();
+        Keyboard.Focus(box);
+        box.SelectAll();
+    }
+
+    static IEnumerable<TextBox> FindRenameBoxes(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TextBox tb) yield return tb;
+            foreach (var x in FindRenameBoxes(child)) yield return x;
         }
+    }
+
+    private void ScheduleSwitch(DesktopCardViewModel card)
+    {
+        CancelPendingSwitch();
+        _pendingSwitchCard = card;
+        var delay = Math.Max(200, (int)GetDoubleClickTime());
+        _pendingSwitch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delay) };
+        _pendingSwitch.Tick += OnPendingSwitchTick;
+        _pendingSwitch.Start();
+    }
+
+    private void OnPendingSwitchTick(object? sender, EventArgs e)
+    {
+        var card = _pendingSwitchCard;
+        CancelPendingSwitch();
+        if (card is not null && !card.IsEditing) _vm.SwitchDesktopCommand.Execute(card);
+    }
+
+    private void CancelPendingSwitch()
+    {
+        if (_pendingSwitch is not null)
+        {
+            _pendingSwitch.Tick -= OnPendingSwitchTick;
+            _pendingSwitch.Stop();
+            _pendingSwitch = null;
+        }
+        _pendingSwitchCard = null;
     }
 
     private void StripChip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -325,6 +484,9 @@ public partial class WidgetWindow : Window
         menu.Items.Add(Item("Umbenennen", "\uE70F", () => _vm.BeginRenameCommand.Execute(card), _vm.CanManageDesktops));
         menu.Items.Add(Item(card.IsExpanded ? "Einklappen" : "Ausklappen", card.IsExpanded ? "\uE70E" : "\uE70D", () => _vm.ToggleCardCommand.Execute(card)));
         menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Programm hinzufügen …", "\uE710", () => _vm.AddAppCommand.Execute(card)));
+        menu.Items.Add(Item("Fensteranordnung wiederherstellen", "\uE8A5", () => _vm.RestoreArrangementCommand.Execute(card), card.HasArrangement));
+        menu.Items.Add(new Separator());
         menu.Items.Add(Item("Neuer Desktop", "\uE710", () => _vm.AddDesktopCommand.Execute(null), _vm.CanManageDesktops));
         menu.Items.Add(Item("Desktop schließen …", "\uE74D", () => _vm.DeleteDesktopCommand.Execute(card), _vm.CanManageDesktops && _vm.Cards.Count > 1));
         HookMenu(menu);
@@ -334,7 +496,7 @@ public partial class WidgetWindow : Window
     {
         if (sender is not FrameworkElement fe || fe.DataContext is not AppRowViewModel row || fe.ContextMenu is not { } menu) return;
         menu.Items.Clear();
-        menu.Items.Add(Item("In den Vordergrund holen", "\uE8A7", () => _vm.ActivateAppCommand.Execute(row)));
+        menu.Items.Add(Item(row.IsRunning ? "In den Vordergrund holen" : "Starten", "\uE8A7", () => _vm.ActivateAppCommand.Execute(row)));
         if (row.Windows.Count > 1)
         {
             var wins = new MenuItem { Header = "Fenster", Icon = Glyph("\uE737") };
@@ -357,7 +519,10 @@ public partial class WidgetWindow : Window
         menu.Items.Add(Item("Auf allen Desktops anzeigen", "\uE718", () => _vm.PinAppCommand.Execute(row), _vm.CanManageDesktops));
         menu.Items.Add(Item("Minimieren", "\uE921", () => _vm.MinimizeAppCommand.Execute(row)));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item(row.Windows.Count > 1 ? "Alle Fenster schließen …" : "Schließen …", "\uE711", () => _vm.CloseAppCommand.Execute(row)));
+        if (row.IsPinnedEntry)
+            menu.Items.Add(Item("Von diesem Desktop entfernen", "\uE738", () => _vm.RemovePinnedAppCommand.Execute(row)));
+        if (row.IsRunning)
+            menu.Items.Add(Item(row.Windows.Count > 1 ? "Alle Fenster schließen …" : "Schließen …", "\uE711", () => _vm.CloseAppCommand.Execute(row)));
         HookMenu(menu);
     }
 
@@ -409,8 +574,25 @@ public partial class WidgetWindow : Window
     private void Row_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_pressedRow is null || !ReferenceEquals(_pressedRow, Ctx<AppRowViewModel>(sender))) return;
+        var row = _pressedRow;
         _pressedRow = null;
-        _vm.ActivateAppCommand.Execute(Ctx<AppRowViewModel>(sender));
+        switch (AppRowInput.OnAppRowClick(row.WindowCount))
+        {
+            case AppRowInput.RowAction.ToggleWindows:
+                _vm.ToggleAppWindows(row);
+                break;
+            case AppRowInput.RowAction.ActivateApp:
+                _vm.ActivateAppCommand.Execute(row);
+                break;
+        }
+        e.Handled = true;
+    }
+
+    private void WindowSubRow_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _pressedRow = null;
+        if (Ctx<WindowRecord>(sender) is { } win)
+            _vm.ActivateWindowCommand.Execute(win);
         e.Handled = true;
     }
 
@@ -422,8 +604,9 @@ public partial class WidgetWindow : Window
     {
         var row = Dragged(e);
         var card = Ctx<DesktopCardViewModel>(sender);
-        var ok = row is not null && card is not null && row.DesktopId != card.Id;
-        e.Effects = ok ? DragDropEffects.Move : DragDropEffects.None;
+        var files = HasAppFiles(e);
+        var ok = card is not null && ((row is not null && row.DesktopId != card.Id) || files);
+        e.Effects = files ? DragDropEffects.Copy : ok ? DragDropEffects.Move : DragDropEffects.None;
         if (card is not null) card.IsDropTarget = ok;
         e.Handled = true;
     }
@@ -438,9 +621,40 @@ public partial class WidgetWindow : Window
         var row = Dragged(e);
         var card = Ctx<DesktopCardViewModel>(sender);
         if (card is not null) card.IsDropTarget = false;
-        if (row is null || card is null) return;
+        if (card is null) return;
         e.Handled = true;
+        if (TryGetDroppedApps(e) is { Count: > 0 } apps)
+        {
+            foreach (var app in apps) _vm.PinEntry(app, card);
+            return;
+        }
+        if (row is null) return;
         await _vm.MoveAppAsync(row, card);
+    }
+
+    private static bool HasAppFiles(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] f && f.Length > 0;
+
+    private List<DeskRecall.Core.Apps.InstalledAppEntry> TryGetDroppedApps(DragEventArgs e)
+    {
+        var list = new List<DeskRecall.Core.Apps.InstalledAppEntry>();
+        if (!HasAppFiles(e) || e.Data.GetData(DataFormats.FileDrop) is not string[] files) return list;
+        foreach (var path in files)
+        {
+            var entry = _vm.ResolveDropped(path);
+            if (entry is not null) list.Add(entry);
+        }
+        return list;
+    }
+
+    private void ArrangementTile_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Ctx<ArrangementTileViewModel>(sender) is { } tile)
+        {
+            if (tile.Window is { } w) _vm.ActivateWindowCommand.Execute(w);
+            else if (tile.Handle != 0) _ = _vm.ActivateWindowByHandleAsync(tile.Handle);
+            e.Handled = true;
+        }
     }
 
     // ------------------------------------------------------------ Umbenennen (braucht kurzzeitig Tastatur)
@@ -449,10 +663,7 @@ public partial class WidgetWindow : Window
     {
         if (sender is not TextBox tb) return;
         if (tb.IsVisible)
-        {
-            EnterKeyboardMode();
-            Dispatcher.BeginInvoke(() => { tb.Focus(); Keyboard.Focus(tb); tb.SelectAll(); }, DispatcherPriority.Input);
-        }
+            Dispatcher.BeginInvoke(() => { if (tb.IsVisible) FocusRenameBox(); }, DispatcherPriority.Input);
         else if (!_vm.Cards.Any(c => c.IsEditing)) LeaveKeyboardMode();
     }
 

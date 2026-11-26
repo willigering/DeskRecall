@@ -7,7 +7,7 @@ CONFIG="${CONFIG:-Release}"
 NUM_FILE=build-number.txt
 BUILD=$(cat "$NUM_FILE" 2>/dev/null || echo 0)
 if [[ "${NO_INCREMENT:-0}" != "1" ]]; then BUILD=$((BUILD + 1)); printf '%s' "$BUILD" > "$NUM_FILE"; fi
-echo "DeskRecall 1.0.0 – Build $BUILD"
+echo "DeskRecall 1.1.0 – Build $BUILD"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 dotnet build DeskRecall.sln -c "$CONFIG" -p:BuildNumber="$BUILD"

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using DeskRecall.Core.Abstractions;
+using DeskRecall.Core.Apps;
 using DeskRecall.Core.Geometry;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
@@ -106,6 +107,22 @@ public sealed class SessionRestorer : ISessionRestorer
             var item = new RestoreItem { Saved = w, NeverAutoStart = rule.NeverAutoStart };
             ComputeTarget(item, rule, snapshot, monitors, o, mapping);
             report.Items.Add(item);
+        }
+
+        // Angeheftete Programme, die in der letzten Sitzung fehlen, ebenfalls starten.
+        if (o.PinnedEntries.Count > 0)
+        {
+            var missing = PinnedApps.MissingLaunchRecords(o.PinnedEntries, snapshot.Windows);
+            foreach (var w in missing)
+            {
+                if (IsExcluded(w, o)) continue;
+                var rule = _rules.Evaluate(w);
+                if (rule.Excluded || rule.NeverAutoStart) continue;
+                var item = new RestoreItem { Saved = w, NeverAutoStart = false };
+                ComputeTarget(item, rule, snapshot, monitors, o, mapping);
+                report.Items.Add(item);
+                _log.Info(Src, $"Angeheftet: {w.FriendlyName} → Desktop {w.DesktopIndex + 1}");
+            }
         }
         var total = report.Items.Count;
 

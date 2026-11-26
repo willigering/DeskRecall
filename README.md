@@ -2,13 +2,13 @@
 
 **Desktop- und Sitzungsmanager für Windows 11** – speichert Ihre Arbeitsumgebung (Programme, virtuelle Desktops, Fensterpositionen, Monitore, Explorer-Ordner) und stellt sie nach einem Neustart automatisch wieder her.
 
-Version 1.0.0 · © 2026 Willi Gering, Gering Digital
+Version 1.1.0 · © 2026 Willi Gering, Gering Digital
 
 ---
 
 ## Schnellstart
 
-1. **Portable Version:** `DeskRecall-1.0.0-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
+1. **Portable Version:** `DeskRecall-1.1.0-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
    Die Datei `portable.flag` neben der EXE sorgt dafür, dass alle Daten im Unterordner `Daten` liegen. Löschen Sie sie, wenn die Daten stattdessen unter `%LOCALAPPDATA%\DeskRecall` liegen sollen.
 2. Beim ersten Start trägt sich DeskRecall in den Autostart ein (`HKCU\…\Run`, ohne Administratorrechte – abschaltbar unter *Einstellungen → Allgemein*).
 3. Arbeiten Sie normal. DeskRecall sichert automatisch bei jeder Änderung (und zusätzlich alle 2 Minuten als Sicherheitsnetz).
@@ -22,12 +22,14 @@ Alternativ: `DeskRecall-win-x64` (framework-abhängig, klein) benötigt die **.N
 
 **Widget (rechter Bildschirmrand)**
 - Klick auf eine Desktop-Karte → zu diesem Desktop wechseln.
-- Klick auf eine Programmzeile → Fenster in den Vordergrund holen (wechselt ggf. den Desktop).
+- Klick auf eine Programmzeile mit einem Fenster → dieses Fenster in den Vordergrund holen (wechselt ggf. den Desktop). Hat die App mehrere Fenster, klappt ein Klick auf die Zeile, das Zählabzeichen oder den Chevron die Liste auf; ein Klick auf eine Unterzeile holt genau dieses Fenster nach vorn.
 - Programmzeile per Drag-and-drop auf eine andere Karte (oder eine Nummer in der eingeklappten Leiste) ziehen → Programm auf diesen Desktop verschieben.
-- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Schließen, Desktop schließen).
-- Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab).
+- **+** auf einer Karte oder in der Leiste, oder eine `.exe`/`.lnk` auf eine Karte ziehen → Programm an diesen Desktop anheften (wird dort gestartet und bei Bedarf dorthin verschoben). Entfernen über das Kontextmenü der Zeile.
+- In der aufgeklappten Karte erscheint eine kleine Vorschau der Fensteranordnung; ein Klick auf ein Rechteck holt das Fenster nach vorn. Über das Karten-Kontextmenü lässt sich die gespeicherte Anordnung wiederherstellen.
+- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Schließen, Desktop schließen).
+- Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab). Der erste Klick eines Doppelklicks wechselt den Desktop nicht; während des Umbenennens wechselt ein Klick ebenfalls nicht.
 - Chevron an der Karte → auf-/zuklappen.
-- Unten: **+** neuer Desktop · **Duplizieren** (neuer Desktop mit gleichem Namen + gleichen Explorer-Ordnern) · **Papierkorb** Desktop schließen (Fenster wandern zum Nachbar-Desktop) · **Wiederherstellen** (ausgewähltes Profil bzw. letzte Sitzung) · **Sichern** · **Profil** · **Verlauf**.
+- Unten: **Programm hinzufügen** · **+** neuer Desktop · **Duplizieren** (neuer Desktop mit gleichem Namen + gleichen Explorer-Ordnern) · **Papierkorb** Desktop schließen (Fenster wandern zum Nachbar-Desktop) · **Wiederherstellen** (ausgewähltes Profil bzw. letzte Sitzung) · **Sichern** · **Profil** · **Verlauf**.
 - Statuszeile anklicken → Details zur Sicherung.
 - Kopfzeile: Einstellungen, Anheften (immer im Vordergrund), Einklappen auf die ~40 px schmale Leiste.
 
@@ -49,7 +51,11 @@ Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Al
 | Profile | Erstellen, laden, aktualisieren, umbenennen, duplizieren, löschen, exportieren, importieren. Beim Laden wird nichts geschlossen; zusätzliche Fenster werden nur nach ausdrücklicher Bestätigung geschlossen (höflich per `WM_CLOSE`). |
 | Verlauf | Einstellbare Anzahl (Standard 25), unveränderte automatische Sicherungen werden nicht dupliziert, jede frühere Sitzung wiederherstellbar. |
 | Fehler | Deinstallierte Programme, geänderte Pfade (Squirrel-Updates wie Discord, versionierte Ordner, „App Paths“), fehlende Monitore, geänderte Auflösung (proportional), Fenster außerhalb des Bildschirms, verzögerte Starts, Administratorrechte (nur nach Zustimmung) – jedes Problem wird übersprungen und protokolliert, der Rest läuft weiter. |
-| Datenschutz | Alles lokal, keine Telemetrie, keine Netzwerkzugriffe, keine Registrierung, keine Administratorrechte. |
+| Angeheftete Programme | Über die App-Auswahl (Startmenü, Suche, Durchsuchen) oder per Drag-and-drop einer Verknüpfung/EXE an einen Desktop binden. Beim Wiederherstellen werden fehlende Einträge gestartet, laufende Fenster bei Bedarf auf den Desktop verschoben. |
+| Fensteranordnung | Aufgeklappte Karten zeigen eine Miniatur der gespeicherten/aktuellen Fensterrechtecke (Monitore, Symbole). Klick holt das Fenster nach vorn; optional „Fensteranordnung wiederherstellen“ aus der letzten Sicherung. |
+| Aktualisierung | Nach dem Start und etwa alle 6 Stunden Prüfung der öffentlichen GitHub-Releases (abstellbar). Hinweis im Widget und im Infobereich, Download der passenden Variante (portabel oder framework-abhängig), Prüfung von Größe und – sofern veröffentlicht – SHA-256, Austausch der EXE ohne Administratorrechte, Neustart, Benutzerdaten bleiben unberührt. Die Feed-URL ist unter Einstellungen änderbar. |
+| Erscheinungsbild | Transparenz wirkt live auf Acryl/Tönung (Text bleibt lesbar). Breite in drei Stufen (Schmal / Normal / Breit). Größenwechsel wird einmalig weich animiert, ohne den Acryl-Effekt bei jedem Tick neu aufzubauen. |
+| Datenschutz | Alles lokal, keine Telemetrie, keine Registrierung, keine Administratorrechte. Die optionale Update-Prüfung fragt nur die (konfigurierbare) GitHub-Release-API ab; es werden keine Nutzungsdaten gesendet. |
 
 ## Unterstützte Windows-Versionen
 
@@ -110,13 +116,14 @@ Oder in Visual Studio 2026 `DeskRecall.sln` öffnen, Startprojekt `DeskRecall`.
 src/DeskRecall.Core      (net10.0, plattformunabhängig, voll getestet)
   RuleEngine, SessionRecorder, SessionRestorer, ProfileManager, SettingsService, LoggingService,
   SessionStore (atomar, Verlauf, Deduplizierung), WindowMatcher, DesktopPlanner, LaunchPlanner,
-  MonitorRemapper, PlacementCorrector, AppLocator, VirtualDesktopApiResolver
+  MonitorRemapper, PlacementCorrector, AppLocator, VirtualDesktopApiResolver,
+  UpdateService, InstalledAppCatalog, ArrangementPreview, WidgetAppearance
 src/DeskRecall.Platform  (net10.0-windows, Win32/COM)
   WindowsVirtualDesktopService (Kompatibilitätsschicht, eigener STA-Thread), WindowManager,
   ProcessManager, MonitorManager, CompatibilityService, ExplorerFolderService, WinEventMonitor,
   AutostartService, FullscreenDetector
 src/DeskRecall           (WPF, MVVM + Microsoft.Extensions.DependencyInjection)
-  AppController, DesktopManager, TrayService, IconService, DialogService,
-  WidgetWindow (WidgetUI), SettingsWindow, ViewModels
+  AppController, DesktopManager, TrayService, IconService, DialogService, UpdateController,
+  WidgetWindow (WidgetUI), SettingsWindow, AppPickerWindow, ViewModels
 tests/DeskRecall.Core.Tests  (xUnit, Unit- und Integrationstests mit simuliertem Windows)
 ```

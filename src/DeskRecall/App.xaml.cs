@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using DeskRecall.Core.Abstractions;
+using DeskRecall.Core.Apps;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 using DeskRecall.Core.Profiles;
@@ -86,6 +87,17 @@ public partial class App : Application
         if (settings.Current.Widget.Mode != WidgetDisplayMode.TrayOnly) _widget.ShowWidget();
         _controller.Start(autostart);
 
+        var updates = _services.GetRequiredService<UpdateController>();
+        updates.PrepareRelaunch = () =>
+        {
+            try { _mutex?.ReleaseMutex(); } catch { }
+            _mutex?.Dispose();
+            _mutex = null;
+        };
+        updates.ShutdownApp = () => Dispatcher.BeginInvoke(() => Shutdown());
+        updates.TrayNotice += (title, text) => _tray?.ShowBalloon(title, text);
+        updates.Start(e.Args);
+
         _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         ThreadPool.RegisterWaitForSingleObject(_showEvent, (_, _) => Dispatcher.BeginInvoke(() => { _widget.ShowWidget(); if (!_widget.IsVisible) _widget.ToggleFromTray(); }), null, -1, false);
     }
@@ -132,6 +144,8 @@ public partial class App : Application
         sc.AddSingleton<ISessionRestorer>(sp => new SessionRestorer(sp.GetRequiredService<IWindowManager>(), sp.GetRequiredService<IVirtualDesktopService>(),
             sp.GetRequiredService<IProcessManager>(), sp.GetRequiredService<IMonitorManager>(), sp.GetRequiredService<IRuleEngine>(), log,
             consent: sp.GetRequiredService<DialogService>()));
+        sc.AddSingleton<IInstalledAppSource, StartMenuAppSource>();
+        sc.AddSingleton<UpdateController>();
         sc.AddSingleton<IconService>();
         sc.AddSingleton<TrayService>();
         sc.AddSingleton<DesktopManager>();
@@ -189,6 +203,9 @@ public partial class App : Application
         menu.Items.Add(profiles);
         if (c.IsRestoring) menu.Items.Add(Item("Wiederherstellung abbrechen", "\uE711", c.CancelRestore));
         menu.Items.Add(new Separator());
+        var updates = _services!.GetRequiredService<UpdateController>();
+        if (updates.HasUpdate)
+            menu.Items.Add(Item(updates.NoticeText ?? "Aktualisierung installieren", "\uE895", () => updates.InstallCommand.Execute(null)));
         menu.Items.Add(Item("Einstellungen", "\uE713", () => OpenSettings()));
         menu.Items.Add(Item("Beenden", "\uE7E8", () => Shutdown()));
         return menu;

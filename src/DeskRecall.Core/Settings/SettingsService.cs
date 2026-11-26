@@ -7,8 +7,11 @@ public interface ISettingsService
 {
     AppSettings Current { get; }
     event Action<AppSettings>? Changed;
+    /// <summary>Sofortige Vorschau (z. B. Transparenz), ohne erst die Datei zu schreiben.</summary>
+    event Action<AppSettings>? Previewed;
     void Save();
     void Update(Action<AppSettings> change);
+    void NotifyPreview();
     AppSettings Reload();
 }
 
@@ -28,6 +31,7 @@ public sealed class SettingsService : ISettingsService
 
     public AppSettings Current { get; private set; }
     public event Action<AppSettings>? Changed;
+    public event Action<AppSettings>? Previewed;
 
     private AppSettings Load()
     {
@@ -48,12 +52,12 @@ public sealed class SettingsService : ISettingsService
     public static void Normalize(AppSettings s)
     {
         s.General ??= new(); s.Backup ??= new(); s.Restore ??= new(); s.Widget ??= new();
-        s.Desktops ??= new(); s.Monitors ??= new(); s.Exclusions ??= new(); s.Diagnostics ??= new();
+        s.Desktops ??= new(); s.Monitors ??= new(); s.Exclusions ??= new(); s.Diagnostics ??= new(); s.Update ??= new();
         s.Rules ??= new(); s.Exclusions.ProcessNames ??= new(); s.Exclusions.TitleContains ??= new();
         s.Widget.CollapsedCards ??= new();
         s.Backup.HistoryCount = Math.Clamp(s.Backup.HistoryCount, 3, 200);
-        s.Widget.ExpandedWidth = Math.Clamp(s.Widget.ExpandedWidth, 260, 360);
-        s.Widget.OpacityPercent = Math.Clamp(s.Widget.OpacityPercent, 40, 100);
+        s.Widget.ExpandedWidth = WidgetAppearance.ToPixels(WidgetAppearance.FromPixels(s.Widget.ExpandedWidth));
+        s.Widget.OpacityPercent = Math.Clamp(s.Widget.OpacityPercent, WidgetAppearance.MinOpacity, WidgetAppearance.MaxOpacity);
         s.Widget.ScalePercent = Math.Clamp(s.Widget.ScalePercent, 80, 140);
         s.Restore.WindowTimeoutSeconds = Math.Clamp(s.Restore.WindowTimeoutSeconds, 5, 300);
         s.Restore.StartupDelaySeconds = Math.Clamp(s.Restore.StartupDelaySeconds, 0, 120);
@@ -77,6 +81,8 @@ public sealed class SettingsService : ISettingsService
         Save();
         Changed?.Invoke(Current);
     }
+
+    public void NotifyPreview() => Previewed?.Invoke(Current);
 
     public AppSettings Reload()
     {
