@@ -23,7 +23,8 @@ public static class ExpandChrome
         HookLoaded(el);
         var open = (bool)e.NewValue;
         if (!el.IsLoaded) { ApplyInstant(el, open); return; }
-        Animate(el, open);
+        try { Animate(el, open); }
+        catch (InvalidOperationException) { ApplyInstant(el, open); } // Animation nie wichtiger als die Anzeige
     }
 
     static void HookLoaded(FrameworkElement el)
@@ -41,7 +42,9 @@ public static class ExpandChrome
 
     static ScaleTransform EnsureScale(FrameworkElement el)
     {
-        if (el.RenderTransform is ScaleTransform s) return s;
+        // Aus einem DataTemplate stammende Transformationen sind eingefroren (Freezable) und lassen sich nicht animieren:
+        // dann eine eigene, veränderbare Instanz verwenden.
+        if (el.RenderTransform is ScaleTransform s && !s.IsFrozen && !s.IsSealed) return s;
         s = new ScaleTransform(1, 1);
         el.RenderTransform = s;
         el.RenderTransformOrigin = new Point(0, 0);
