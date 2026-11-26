@@ -277,15 +277,46 @@ public sealed class WindowManager : IWindowManager
     {
         var h = (IntPtr)hwnd;
         if (!IsWindow(h)) return false;
-        if (IsIconic(h)) ShowWindowAsync(h, SW_RESTORE);
-        if (SetForegroundWindow(h) && GetForegroundWindow() == h) return true;
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        if (IsForeground(h)) return true;
+        if (SetForegroundWindow(h) && IsForeground(h)) return true;
 
-        // Vordergrund-Sperre lösen: eine leere Mauseingabe zählt als „letzte Eingabe“ dieses Prozesses.
-        var inputs = new[] { new INPUT { type = 0 } };
-        SendInput(1, inputs, Marshal.SizeOf<INPUT>());
-        if (SetForegroundWindow(h)) return true;
+        // Das Widget ist WS_EX_NOACTIVATE und bekommt damit keine Vordergrundrechte.
+        // Alt-Taste (SendInput), AllowSetForegroundWindow und AttachThreadInput umgehen die Sperre.
+        try { AllowSetForegroundWindow(ASFW_ANY); } catch { }
+        SendAlt();
+        if (SetForegroundWindow(h) && IsForeground(h)) return true;
+
+        var fg = GetForegroundWindow();
+        var fgThread = fg == IntPtr.Zero ? 0 : GetWindowThreadProcessId(fg, out _);
+        var targetThread = GetWindowThreadProcessId(h, out _);
+        var me = GetCurrentThreadId();
+        var attachedFg = fgThread != 0 && fgThread != me && AttachThreadInput(fgThread, me, true);
+        var attachedTarget = targetThread != 0 && targetThread != me && targetThread != fgThread && AttachThreadInput(targetThread, me, true);
+        try
+        {
+            BringWindowToTop(h);
+            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+            SetForegroundWindow(h);
+        }
+        finally
+        {
+            if (attachedTarget) AttachThreadInput(targetThread, me, false);
+            if (attachedFg) AttachThreadInput(fgThread, me, false);
+        }
+        if (IsForeground(h)) return true;
+
         SwitchToThisWindow(h, true);
-        return GetForegroundWindow() == h;
+        return IsForeground(h);
+    }
+
+    private static bool IsForeground(IntPtr h) => GetForegroundWindow() == h;
+
+    private static void SendAlt()
+    {
+        var down = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_MENU } } };
+        var up = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = KEYEVENTF_KEYUP } } };
+        SendInput(2, new[] { down, up }, Marshal.SizeOf<INPUT>());
     }
 
     public bool Minimize(long hwnd) => ShowWindowAsync((IntPtr)hwnd, SW_MINIMIZE);

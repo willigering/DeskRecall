@@ -48,6 +48,7 @@ public sealed class AppController : IDisposable
     private readonly HashSet<long> _liveRuleHandled = new();
     private int _refreshing;
     private bool _refreshPending;
+    private int _quietUi;
     private bool _shutdownSaved;
     private bool _fullscreen;
     private long _lastRefreshTick;
@@ -198,6 +199,41 @@ public sealed class AppController : IDisposable
         if (!fs && _refreshPending) _ = RefreshAsync();
     }
 
+    /// <summary>
+    /// Unterdrückt UI-Aktualisierungen während eines Desktop-Wechsels, damit die Karten
+    /// nicht mitten in der Animation neu aufgebaut werden. Nach <paramref name="hold"/>
+    /// wird eine ausstehende Aktualisierung nachgeholt.
+    /// </summary>
+    public IDisposable QuietUi(TimeSpan hold)
+    {
+        Interlocked.Increment(ref _quietUi);
+        return new QuietScope(this, hold);
+    }
+
+    private sealed class QuietScope : IDisposable
+    {
+        private readonly AppController _owner;
+        private readonly TimeSpan _hold;
+        private int _disposed;
+        public QuietScope(AppController owner, TimeSpan hold) { _owner = owner; _hold = hold; }
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
+            _ = _owner.ReleaseQuietAsync(_hold);
+        }
+    }
+
+    private async Task ReleaseQuietAsync(TimeSpan hold)
+    {
+        try { if (hold > TimeSpan.Zero) await Task.Delay(hold); }
+        catch { }
+        if (Interlocked.Decrement(ref _quietUi) == 0)
+        {
+            _refreshPending = true;
+            if (UiActive && !_fullscreen) SchedulePendingRefresh();
+        }
+    }
+
     // ---------------------------------------------------------------- Live-Zustand
 
     public async Task RefreshAsync()
@@ -205,6 +241,11 @@ public sealed class AppController : IDisposable
         if (Interlocked.Exchange(ref _refreshing, 1) == 1) { _refreshPending = true; return; }
         try
         {
+            if (Volatile.Read(ref _quietUi) > 0)
+            {
+                _refreshPending = true;
+                return;
+            }
             var wait = _lastRefreshTick == 0 ? 0 : MinUiRefreshMs - (Environment.TickCount64 - _lastRefreshTick);
             if (wait > 0)
             {
@@ -249,7 +290,7 @@ public sealed class AppController : IDisposable
         finally
         {
             Interlocked.Exchange(ref _refreshing, 0);
-            if (_refreshPending && UiActive && !_fullscreen) SchedulePendingRefresh();
+            if (_refreshPending && UiActive && !_fullscreen && Volatile.Read(ref _quietUi) == 0) SchedulePendingRefresh();
         }
     }
 

@@ -575,7 +575,8 @@ public partial class WidgetWindow : Window
         if (_pressedRow is null || !ReferenceEquals(_pressedRow, Ctx<AppRowViewModel>(sender))) return;
         var row = _pressedRow;
         _pressedRow = null;
-        switch (AppRowInput.OnAppRowClick(row.WindowCount))
+        var onToggle = e.OriginalSource is DependencyObject d && IsToggleChrome(d);
+        switch (AppRowInput.OnAppRowClick(row.WindowCount, onToggleChrome: onToggle))
         {
             case AppRowInput.RowAction.ToggleWindows:
                 _vm.ToggleAppWindows(row);
@@ -694,6 +695,17 @@ public partial class WidgetWindow : Window
         // Fokus an das vorherige Programm zurückgeben
         if (_previousForeground != IntPtr.Zero && _previousForeground != _hwnd) SetForegroundWindow(_previousForeground);
         _previousForeground = IntPtr.Zero;
+    }
+
+    private static bool IsToggleChrome(DependencyObject? d)
+    {
+        while (d is not null)
+        {
+            if (d is FrameworkElement fe && AppRowInput.IsToggleChromeName(fe.Name)) return true;
+            if (d is FrameworkElement { Name: "Row" }) return false;
+            d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+        }
+        return false;
     }
 
     private static T? FindParent<T>(DependencyObject? d, Func<T, bool>? predicate = null) where T : DependencyObject

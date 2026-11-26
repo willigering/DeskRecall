@@ -56,6 +56,7 @@ public struct INPUT
 public struct INPUTUNION
 {
     [FieldOffset(0)] public MOUSEINPUT mi;
+    [FieldOffset(0)] public KEYBDINPUT ki;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -66,8 +67,21 @@ public struct MOUSEINPUT
     public IntPtr dwExtraInfo;
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct KEYBDINPUT
+{
+    public ushort wVk, wScan;
+    public uint dwFlags, time;
+    public IntPtr dwExtraInfo;
+}
+
 public static class NativeMethods
 {
+    public const uint INPUT_MOUSE = 0, INPUT_KEYBOARD = 1;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const ushort VK_MENU = 0x12;
+    public const int ASFW_ANY = -1;
+
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
     public const long WS_CAPTION = 0x00C00000L;
@@ -131,6 +145,7 @@ public static class NativeMethods
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
     [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int cmd);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int processId);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();

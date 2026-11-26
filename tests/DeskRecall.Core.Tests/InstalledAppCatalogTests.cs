@@ -256,8 +256,22 @@ public class AppRowInputTests
         => Assert.Equal(AppRowInput.RowAction.ActivateApp, AppRowInput.OnAppRowClick(1));
 
     [Fact]
-    public void Multi_window_row_click_toggles_the_list()
-        => Assert.Equal(AppRowInput.RowAction.ToggleWindows, AppRowInput.OnAppRowClick(3));
+    public void Multi_window_row_click_activates_the_most_recent_window()
+        => Assert.Equal(AppRowInput.RowAction.ActivateApp, AppRowInput.OnAppRowClick(3));
+
+    [Fact]
+    public void Chevron_or_badge_click_toggles_the_list()
+    {
+        Assert.Equal(AppRowInput.RowAction.ToggleWindows, AppRowInput.OnAppRowClick(3, onToggleChrome: true));
+        Assert.True(AppRowInput.IsToggleChromeName("CountBadge"));
+        Assert.True(AppRowInput.IsToggleChromeName("AppChevron"));
+        Assert.False(AppRowInput.IsToggleChromeName("WinGlyph"));
+        Assert.False(AppRowInput.IsToggleChromeName("Row"));
+    }
+
+    [Fact]
+    public void Badge_click_on_a_single_window_row_still_activates()
+        => Assert.Equal(AppRowInput.RowAction.ActivateApp, AppRowInput.OnAppRowClick(1, onToggleChrome: true));
 
     [Fact]
     public void Pinned_unused_row_click_activates_to_launch()

@@ -52,14 +52,37 @@ internal sealed class FakeVirtualDesktops : IVirtualDesktopService
     public string BackendDescription => "Fake";
     public string? LastError => null;
     public IReadOnlyList<DesktopInfo> GetDesktops() => Desktops.Select(d => new DesktopInfo { Id = d.Id, Index = d.Index, Name = d.Name }).ToList();
-    public Guid? GetCurrentDesktopId() => Current;
+    /// <summary>Nach SwitchToDesktop bleibt Current unverändert, bis so oft GetCurrentDesktopId aufgerufen wurde.</summary>
+    public int SwitchSettleAfterGets { get; set; }
+    Guid? _pendingSwitch;
+    int _getsSinceSwitch;
+
+    public Guid? GetCurrentDesktopId()
+    {
+        if (_pendingSwitch is { } pending && SwitchSettleAfterGets > 0)
+        {
+            _getsSinceSwitch++;
+            if (_getsSinceSwitch >= SwitchSettleAfterGets)
+            {
+                Current = pending;
+                _pendingSwitch = null;
+            }
+        }
+        return Current;
+    }
     public Guid? GetWindowDesktopId(long hwnd) => WindowDesktop.TryGetValue(hwnd, out var g) ? g : null;
     public bool IsWindowPinned(long hwnd) => Pinned.Contains(hwnd);
     public IReadOnlyDictionary<long, bool> GetWindowsPinned(IReadOnlyList<long> hwnds)
         => hwnds.ToDictionary(h => h, h => Pinned.Contains(h));
     public bool MoveWindowToDesktop(long hwnd, Guid desktopId) { Calls.Add($"move {hwnd}->{Desktops.First(d => d.Id == desktopId).Index}"); WindowDesktop[hwnd] = desktopId; return true; }
     public bool SetWindowPinned(long hwnd, bool pinned) { if (pinned) Pinned.Add(hwnd); else Pinned.Remove(hwnd); return true; }
-    public bool SwitchToDesktop(Guid desktopId) { Calls.Add($"switch {Desktops.First(d => d.Id == desktopId).Index}"); Current = desktopId; return true; }
+    public bool SwitchToDesktop(Guid desktopId)
+    {
+        Calls.Add($"switch {Desktops.First(d => d.Id == desktopId).Index}");
+        if (SwitchSettleAfterGets > 0) { _pendingSwitch = desktopId; _getsSinceSwitch = 0; }
+        else Current = desktopId;
+        return true;
+    }
     public DesktopInfo? CreateDesktop(string? name = null) { var d = new DesktopInfo { Id = Guid.NewGuid(), Name = name ?? "" }; Desktops.Add(d); Reindex(); Calls.Add("create " + name); return d; }
     public bool RemoveDesktop(Guid desktopId) { Desktops.RemoveAll(d => d.Id == desktopId); Reindex(); return true; }
     public bool RenameDesktop(Guid desktopId, string name) { Desktops.First(d => d.Id == desktopId).Name = name; Calls.Add("rename " + name); return true; }
@@ -75,12 +98,13 @@ internal sealed class FakeWindows : IWindowManager
     public List<WindowRecord> Live { get; } = new();
     public Dictionary<long, PlacementTarget> Applied { get; } = new();
     public List<long> Closed { get; } = new();
+    public List<long> Focused { get; } = new();
     public IReadOnlyList<WindowRecord> EnumerateAppWindows(bool detailed = true) { lock (Live) return Live.Select(w => w.Clone()).ToList(); }
     public bool IsAlive(long hwnd) { lock (Live) return Live.Any(w => w.Handle == hwnd); }
     public RectI? GetWindowBounds(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.NormalBounds : null;
     public WindowShowState? GetState(long hwnd) => Applied.TryGetValue(hwnd, out var t) ? t.State : WindowShowState.Normal;
     public bool ApplyPlacement(long hwnd, PlacementTarget target) { Applied[hwnd] = target; return true; }
-    public bool BringToFront(long hwnd) => true;
+    public bool BringToFront(long hwnd) { Focused.Add(hwnd); return true; }
     public bool Minimize(long hwnd) => true;
     public bool Close(long hwnd) { Closed.Add(hwnd); return true; }
     public void Add(WindowRecord w) { lock (Live) Live.Add(w); }

@@ -29,7 +29,7 @@ public sealed class AppRowViewModel : ObservableObject
     public string? AppUserModelId { get; init; }
     public List<WindowRecord> Windows { get; set; } = new();
     public ObservableCollection<WindowRecord> WindowItems { get; } = new();
-    public long PrimaryHandle => Windows.FirstOrDefault()?.Handle ?? 0;
+    public long PrimaryHandle => AppRowInput.MostRecent(Windows)?.Handle ?? 0;
     public bool IsWindowsExpanded
     {
         get => _isWindowsExpanded;
@@ -177,7 +177,7 @@ public sealed class WidgetViewModel : ObservableObject
         CommitRenameCommand = new AsyncRelayCommand(async p => { if (p is DesktopCardViewModel c) await CommitRenameAsync(c); });
         CancelRenameCommand = new RelayCommand(p => { if (p is DesktopCardViewModel c) c.IsEditing = false; });
         ActivateAppCommand = new AsyncRelayCommand(ActivateOrLaunchAsync);
-        ActivateWindowCommand = new AsyncRelayCommand(async p => { if (p is WindowRecord w) { await _desktops.BringToFrontAsync(w.Handle, w.DesktopId); await _controller.RefreshAsync(); } });
+        ActivateWindowCommand = new AsyncRelayCommand(async p => { if (p is WindowRecord w) await ActivateWindowQuietAsync(w.Handle, w.DesktopId); });
         MinimizeAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) foreach (var w in a.Windows) await _desktops.MinimizeAsync(w.Handle); });
         CloseAppCommand = new AsyncRelayCommand(CloseAppAsync);
         PinAppCommand = new AsyncRelayCommand(async p => { if (p is AppRowViewModel a) { foreach (var w in a.Windows) await _desktops.PinWindowAsync(w.Handle, true); await _controller.RefreshAsync(); } }, _ => _desktops.CanManage);
@@ -490,9 +490,14 @@ public sealed class WidgetViewModel : ObservableObject
     public async Task ActivateWindowByHandleAsync(long handle)
     {
         var win = Cards.SelectMany(c => c.Apps).SelectMany(a => a.Windows).FirstOrDefault(w => w.Handle == handle);
-        if (win is not null) await _desktops.BringToFrontAsync(win.Handle, win.DesktopId);
-        else await _desktops.BringToFrontAsync(handle, null);
-        await _controller.RefreshAsync();
+        if (win is not null) await ActivateWindowQuietAsync(win.Handle, win.DesktopId);
+        else await ActivateWindowQuietAsync(handle, null);
+    }
+
+    private async Task ActivateWindowQuietAsync(long handle, Guid? desktopId)
+    {
+        using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            await _desktops.BringToFrontAsync(handle, desktopId);
     }
 
     public void PinEntry(InstalledAppEntry entry, DesktopCardViewModel card)
@@ -517,29 +522,30 @@ public sealed class WidgetViewModel : ObservableObject
         if (p is not AppRowViewModel a) return;
         if (a.IsRunning)
         {
-            await _desktops.BringToFrontAsync(a.PrimaryHandle, a.DesktopId);
-            await _controller.RefreshAsync();
+            var handle = AppRowInput.MostRecent(a.Windows)?.Handle ?? a.PrimaryHandle;
+            await ActivateWindowQuietAsync(handle, a.DesktopId);
             return;
         }
         if (!a.IsPinnedEntry) return;
         try
         {
-            if (_desktops.CanManage) await _desktops.SwitchAsync(a.DesktopId);
-            var req = new LaunchRequest(
-                a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
-                a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
-                a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
-                a.AppUserModelId,
-                false,
-                false,
-                a.AppName);
-            // Fix the explorer args – I'll set this properly below
-            var result = _processes.Launch(req);
-            if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
-                _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
-            else
-                await Task.Delay(400);
-            await _controller.RefreshAsync();
+            using (_controller.QuietUi(TimeSpan.FromMilliseconds(400)))
+            {
+                if (_desktops.CanManage) await _desktops.SwitchAsync(a.DesktopId);
+                var req = new LaunchRequest(
+                    a.AppUserModelId is null ? (a.ExecutablePath ?? a.AppName) : "explorer.exe",
+                    a.AppUserModelId is null ? null : CommandLine.Quote("shell:AppsFolder\\" + a.AppUserModelId),
+                    a.ExecutablePath is null ? null : WinPath.GetDirectoryName(a.ExecutablePath),
+                    a.AppUserModelId,
+                    false,
+                    false,
+                    a.AppName);
+                var result = _processes.Launch(req);
+                if (result.Status is LaunchStatus.NotFound or LaunchStatus.Failed)
+                    _dialogs.Info("Start fehlgeschlagen", result.Message ?? "Das Programm konnte nicht gestartet werden.");
+                else
+                    await Task.Delay(400);
+            }
         }
         catch (Exception ex)
         {

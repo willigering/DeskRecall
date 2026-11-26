@@ -1,4 +1,5 @@
 using DeskRecall.Core.Abstractions;
+using DeskRecall.Core.Desktops;
 using DeskRecall.Core.Logging;
 using DeskRecall.Core.Models;
 
@@ -10,16 +11,27 @@ public sealed class DesktopManager
     private readonly IVirtualDesktopService _vd;
     private readonly IWindowManager _windows;
     private readonly ILogService _log;
+    private readonly IClock _clock;
 
-    public DesktopManager(IVirtualDesktopService vd, IWindowManager windows, ILogService log)
+    public DesktopManager(IVirtualDesktopService vd, IWindowManager windows, ILogService log, IClock? clock = null)
     {
         _vd = vd; _windows = windows; _log = log;
+        _clock = clock ?? SystemClock.Instance;
     }
 
     public bool CanManage => _vd.CanManage;
     public string Backend => _vd.BackendDescription;
 
-    public Task<bool> SwitchAsync(Guid id) => Run("Desktop wechseln", () => _vd.SwitchToDesktop(id));
+    public async Task<bool> SwitchAsync(Guid id)
+    {
+        try
+        {
+            var ok = await WindowActivation.SwitchToDesktopAsync(_vd, id, _clock);
+            if (!ok) _log.Warn("Desktops", $"Desktop wechseln war nicht möglich{(_vd.LastError is null ? "" : $": {_vd.LastError}")}");
+            return ok;
+        }
+        catch (Exception ex) { _log.Warn("Desktops", "Desktop wechseln fehlgeschlagen", ex); return false; }
+    }
 
     public Task<DesktopInfo?> CreateAsync(string? name) => Task.Run(() =>
     {
@@ -38,12 +50,17 @@ public sealed class DesktopManager
 
     public Task<bool> PinWindowAsync(long hwnd, bool pin) => Run("Fenster anheften", () => _vd.SetWindowPinned(hwnd, pin));
 
-    /// <summary>Holt ein Fenster nach vorne; liegt es auf einem anderen Desktop, wird zuerst dorthin gewechselt.</summary>
-    public Task<bool> BringToFrontAsync(long hwnd, Guid? desktopId) => Run("Fenster aktivieren", () =>
+    /// <summary>Wechselt bei Bedarf auf den Desktop des Fensters, wartet auf den Wechsel und holt es dann in den Vordergrund.</summary>
+    public async Task<bool> BringToFrontAsync(long hwnd, Guid? desktopId)
     {
-        if (desktopId is { } d && d != Guid.Empty && _vd.GetCurrentDesktopId() != d) _vd.SwitchToDesktop(d);
-        return _windows.BringToFront(hwnd);
-    });
+        try
+        {
+            var ok = await WindowActivation.ActivateAsync(_vd, _windows, hwnd, desktopId, _clock);
+            if (!ok) _log.Warn("Desktops", $"Fenster aktivieren war nicht möglich{(_vd.LastError is null ? "" : $": {_vd.LastError}")}");
+            return ok;
+        }
+        catch (Exception ex) { _log.Warn("Desktops", "Fenster aktivieren fehlgeschlagen", ex); return false; }
+    }
 
     public Task<bool> MinimizeAsync(long hwnd) => Run("Fenster minimieren", () => _windows.Minimize(hwnd));
 

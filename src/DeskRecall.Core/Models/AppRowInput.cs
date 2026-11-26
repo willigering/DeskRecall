@@ -1,15 +1,31 @@
 namespace DeskRecall.Core.Models;
 
-/// <summary>Klickverhalten einer App-Zeile: mehrere Fenster aufklappen, einzelnes fokussieren.</summary>
+/// <summary>
+/// Klickverhalten einer App-Zeile: die Zeile selbst aktiviert das zuletzt verwendete Fenster
+/// (bzw. startet eine angeheftete, nicht laufende App). Chevron und Fensterzahl klappen nur die Liste auf.
+/// </summary>
 public static class AppRowInput
 {
     public enum RowAction { None, ActivateApp, ToggleWindows, ActivateWindow }
 
-    /// <summary>Klick auf die App-Zeile (nicht auf eine Unterzeile).</summary>
-    public static RowAction OnAppRowClick(int windowCount, bool onSubRow = false)
+    /// <summary>Namen der Elemente, die nur die Fensterliste umschalten (nicht die App aktivieren).</summary>
+    public static bool IsToggleChromeName(string? name) => name is "CountBadge" or "AppChevron";
+
+    /// <summary>Klick auf die App-Zeile oder eine Unterzeile.</summary>
+    public static RowAction OnAppRowClick(int windowCount, bool onSubRow = false, bool onToggleChrome = false)
     {
         if (onSubRow) return RowAction.ActivateWindow;
-        return windowCount > 1 ? RowAction.ToggleWindows : RowAction.ActivateApp;
+        if (onToggleChrome && windowCount > 1) return RowAction.ToggleWindows;
+        return RowAction.ActivateApp;
+    }
+
+    /// <summary>Das zuletzt in den Vordergrund geholte Fenster (kleinste Z-Ordnung, oben in der EnumWindows-Reihenfolge).</summary>
+    public static WindowRecord? MostRecent(IEnumerable<WindowRecord> windows)
+    {
+        WindowRecord? best = null;
+        foreach (var w in windows)
+            if (best is null || w.ZOrder < best.ZOrder) best = w;
+        return best;
     }
 
     /// <summary>Aufgeklappter Zustand bleibt nur erhalten, solange noch mehrere Fenster da sind.</summary>
