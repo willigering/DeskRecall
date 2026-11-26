@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DeskRecall.Core.Abstractions;
 using DeskRecall.Core.Desktops;
 using DeskRecall.Core.Logging;
@@ -22,15 +23,30 @@ public sealed class DesktopManager
     public bool CanManage => _vd.CanManage;
     public string Backend => _vd.BackendDescription;
 
-    public async Task<bool> SwitchAsync(Guid id)
+    /// <summary>Letzte Messung Klick → Wechsel → Fokus (für Einstellungen → Diagnose).</summary>
+    public ActivationTiming? LastTiming { get; private set; }
+    /// <summary>Zeit vom Klick bis zum Start des Wechsels im Hintergrund (Oberfläche + Warteschlange).</summary>
+    public TimeSpan LastClickLatency { get; private set; }
+
+    /// <summary>Wechselt den Desktop im Hintergrund (nie auf dem UI-Thread), ohne feste Wartezeit.</summary>
+    public Task<bool> SwitchAsync(Guid id, long clickTimestamp = 0) => Task.Run(async () =>
     {
         try
         {
-            var ok = await WindowActivation.SwitchToDesktopAsync(_vd, id, _clock);
-            if (!ok) _log.Warn("Desktops", $"Desktop wechseln war nicht möglich{(_vd.LastError is null ? "" : $": {_vd.LastError}")}");
-            return ok;
+            var started = Stopwatch.GetTimestamp();
+            var timing = await WindowActivation.SwitchDesktopAsync(_vd, id, _clock);
+            Record(timing, clickTimestamp, started);
+            if (!timing.Focused) _log.Warn("Desktops", $"Desktop wechseln war nicht möglich{(_vd.LastError is null ? "" : $": {_vd.LastError}")}");
+            return timing.Focused;
         }
         catch (Exception ex) { _log.Warn("Desktops", "Desktop wechseln fehlgeschlagen", ex); return false; }
+    });
+
+    void Record(ActivationTiming timing, long clickTimestamp, long started)
+    {
+        LastTiming = timing;
+        LastClickLatency = clickTimestamp == 0 ? TimeSpan.Zero : Stopwatch.GetElapsedTime(clickTimestamp, started);
+        _log.Debug("Desktops", $"{timing.Describe()}{(clickTimestamp == 0 ? "" : $", ab Klick {Stopwatch.GetElapsedTime(clickTimestamp).TotalMilliseconds:0} ms")}");
     }
 
     public Task<DesktopInfo?> CreateAsync(string? name) => Task.Run(() =>
@@ -50,17 +66,20 @@ public sealed class DesktopManager
 
     public Task<bool> PinWindowAsync(long hwnd, bool pin) => Run("Fenster anheften", () => _vd.SetWindowPinned(hwnd, pin));
 
-    /// <summary>Wechselt bei Bedarf auf den Desktop des Fensters, wartet auf den Wechsel und holt es dann in den Vordergrund.</summary>
-    public async Task<bool> BringToFrontAsync(long hwnd, Guid? desktopId)
+    /// <summary>Wechselt bei Bedarf auf den Desktop des Fensters, bestätigt den Wechsel und holt es dann in den Vordergrund – im Hintergrund.</summary>
+    public Task<bool> BringToFrontAsync(long hwnd, Guid? desktopId, long clickTimestamp = 0, Func<Task>? beforeFocus = null) => Task.Run(async () =>
     {
         try
         {
-            var ok = await WindowActivation.ActivateAsync(_vd, _windows, hwnd, desktopId, _clock);
-            if (!ok) _log.Warn("Desktops", $"Fenster aktivieren war nicht möglich{(_vd.LastError is null ? "" : $": {_vd.LastError}")}");
-            return ok;
+            var started = Stopwatch.GetTimestamp();
+            if (beforeFocus is not null) { try { await beforeFocus(); } catch { } }
+            var timing = await WindowActivation.ActivateMeasuredAsync(_vd, _windows, hwnd, desktopId, _clock);
+            Record(timing, clickTimestamp, started);
+            if (!timing.Focused) _log.Debug("Desktops", "Fenster ließ sich nicht sicher in den Vordergrund holen.");
+            return timing.Focused;
         }
         catch (Exception ex) { _log.Warn("Desktops", "Fenster aktivieren fehlgeschlagen", ex); return false; }
-    }
+    });
 
     public Task<bool> MinimizeAsync(long hwnd) => Run("Fenster minimieren", () => _windows.Minimize(hwnd));
 

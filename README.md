@@ -2,13 +2,13 @@
 
 **Desktop- und Sitzungsmanager für Windows 11** – speichert Ihre Arbeitsumgebung (Programme, virtuelle Desktops, Fensterpositionen, Monitore, Explorer-Ordner) und stellt sie nach einem Neustart automatisch wieder her.
 
-Version 1.1.1 · © 2026 Willi Gering, Gering Digital
+Version 1.2.0 · © 2026 Willi Gering, Gering Digital
 
 ---
 
 ## Schnellstart
 
-1. **Portable Version:** `DeskRecall-1.1.1-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
+1. **Portable Version:** `DeskRecall-1.2.0-portable-win-x64.zip` entpacken (z. B. nach `C:\Tools\DeskRecall`) und `DeskRecall.exe` starten. Es wird nichts installiert, .NET muss nicht vorhanden sein.
    Die Datei `portable.flag` neben der EXE sorgt dafür, dass alle Daten im Unterordner `Daten` liegen. Löschen Sie sie, wenn die Daten stattdessen unter `%LOCALAPPDATA%\DeskRecall` liegen sollen.
 2. Beim ersten Start trägt sich DeskRecall in den Autostart ein (`HKCU\…\Run`, ohne Administratorrechte – abschaltbar unter *Einstellungen → Allgemein*).
 3. Arbeiten Sie normal. DeskRecall sichert automatisch bei jeder Änderung (und zusätzlich alle 2 Minuten als Sicherheitsnetz).
@@ -21,19 +21,23 @@ Alternativ: `DeskRecall-win-x64` (framework-abhängig, klein) benötigt die **.N
 ## Bedienung
 
 **Widget (rechter Bildschirmrand)**
-- Klick auf eine Desktop-Karte → zu diesem Desktop wechseln.
+- Klick auf eine Desktop-Karte → sofort zu diesem Desktop wechseln (ohne Wartezeit; die Karte wird sofort als aktiv markiert, der Wechsel läuft im Hintergrund).
 - Klick auf eine Programmzeile mit einem Fenster → dieses Fenster in den Vordergrund holen (wechselt ggf. den Desktop). Hat die App mehrere Fenster, bleibt die Liste zunächst zugeklappt; ein Klick auf die Zeile, das Zählabzeichen oder den Chevron klappt die Fenstertitel auf. Ein Klick auf eine Unterzeile holt genau dieses Fenster nach vorn.
+- **Browser** (Chrome, Edge, Firefox, Brave, Vivaldi, Opera und andere Chromium-/Firefox-Browser): Jedes Browserfenster erscheint als Unterzeile, darunter seine **Tabs** (zugeklappt; Zählabzeichen oder Chevron klappt auf). Bei nur einem Fenster stehen die Tabs direkt unter dem Programm. Klick auf einen Tab → Desktop wechseln, Fenster nach vorn, Tab auswählen.
+- **Tabs umbenennen:** Doppelklick auf einen Tab oder Rechtsklick → „Umbenennen“ (der Text ist ausgewählt, Tippen ersetzt ihn; Enter bestätigt, Esc bricht ab). Der Name gilt nur in DeskRecall und wird lokal in `tab-names.json` gespeichert; „Ursprünglichen Namen wiederherstellen“ setzt ihn zurück. Ein Stift-Symbol markiert umbenannte Tabs, der Tooltip zeigt den Originaltitel.
 - Programmzeile per Drag-and-drop auf eine andere Karte (oder eine Nummer in der eingeklappten Leiste) ziehen → Programm auf diesen Desktop verschieben.
-- **+** auf einer Karte oder in der Leiste, oder eine `.exe`/`.lnk` auf eine Karte ziehen → Programm an diesen Desktop anheften (wird dort gestartet und bei Bedarf dorthin verschoben). Entfernen über das Kontextmenü der Zeile.
+- **+ Programm hinzufügen** auf einer Karte, oder eine `.exe`/`.lnk` auf eine Karte ziehen → Programm an diesen Desktop anheften. Im Auswahldialog: **Hinzufügen** (nur anheften) oder **Hinzufügen und starten** (anheften und sofort auf diesem Desktop starten). Entfernen über das Kontextmenü der Zeile.
+- **Papierkorb** unten rechts in jeder Karte → diesen Desktop schließen (Fenster wandern zum Nachbar-Desktop).
+- **+ Neuer Desktop** direkt unter der letzten Karte (bzw. **+** in der eingeklappten Leiste).
 - Über das Karten-Kontextmenü lässt sich die gespeicherte Fensteranordnung wiederherstellen.
-- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Schließen, Desktop schließen).
-- Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab). Der erste Klick eines Doppelklicks wechselt den Desktop nicht; während des Umbenennens wechselt ein Klick ebenfalls nicht.
+- Rechtsklick auf Karte/Programm → Kontextmenü (Umbenennen, Programm hinzufügen, Fensteranordnung wiederherstellen, Neuer Desktop, **Desktop duplizieren** (gleicher Name + gleiche Explorer-Ordner), Verschieben nach …, Auf allen Desktops anzeigen, Minimieren, Schließen, Desktop schließen).
+- Doppelklick auf den Desktop-Namen → umbenennen (Enter bestätigt, Esc bricht ab). Bei einer anderen Karte wechselt schon der erste Klick sofort den Desktop; während des Umbenennens wechselt ein Klick nicht.
 - Chevron an der Karte → auf-/zuklappen.
-- Unten: **Programm hinzufügen** · **+** neuer Desktop · **Duplizieren** (neuer Desktop mit gleichem Namen + gleichen Explorer-Ordnern) · **Papierkorb** Desktop schließen (Fenster wandern zum Nachbar-Desktop) · **Wiederherstellen** (ausgewähltes Profil bzw. letzte Sitzung) · **Sichern** · **Profil** · **Verlauf**.
-- Statuszeile anklicken → Details zur Sicherung.
+- Unten: **Profil** · **Verlauf** (jede frühere Sicherung wiederherstellen).
+- Statuszeile anklicken → Details zur Sicherung mit **Wiederherstellen** (ausgewähltes Profil bzw. letzte Sitzung) und **Jetzt sichern**. Beides gibt es auch im Tray-Menü; „Jetzt sichern“ zusätzlich unter Einstellungen → Sicherung.
 - Kopfzeile: Einstellungen, Anheften (immer im Vordergrund), Einklappen auf die ~40 px schmale Leiste.
 
-Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Alt-Tab/Taskleiste, verwendet keine Tastatur- oder Maus-Hooks und blendet sich bei Vollbildanwendungen (Spiele, Videos, Präsentationen) automatisch aus. Nur beim Umbenennen eines Desktops wird kurz Tastatureingabe angenommen; danach erhält das vorherige Programm den Fokus zurück.
+Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Alt-Tab/Taskleiste, verwendet keine Tastatur- oder Maus-Hooks und blendet sich bei Vollbildanwendungen (Spiele, Videos, Präsentationen) automatisch aus. Nur beim Umbenennen eines Desktops oder Tabs wird kurz Tastatureingabe angenommen; danach erhält das vorherige Programm den Fokus zurück.
 
 **Infobereich (Tray):** Linksklick zeigt/klappt das Widget, Rechtsklick öffnet das Menü (Sichern, Wiederherstellen, Profil laden, Einstellungen, Beenden).
 
@@ -46,7 +50,7 @@ Das Widget **nimmt niemals den Fokus** (WS_EX_NOACTIVATE), erscheint nicht in Al
 | Gespeichert | Prozessname, EXE-Pfad bzw. AppUserModelID (Store-Apps), Fensterklasse und -titel, virtueller Desktop (GUID + Index), Normalposition/-größe, Zustand (normal/minimiert/maximiert), Monitor (Gerätepfad), Dokumentpfade aus der Befehlszeile (nur echte, existierende Dateien), Explorer-Ordner, Zeitpunkt. |
 | Wiederherstellung | Desktops abgleichen (GUID, dann Reihenfolge) → fehlende anlegen, Namen/Reihenfolge setzen → laufende Fenster zuordnen → nur fehlende Programme starten → auf Fenster warten (Splashscreens werden ignoriert, Zeitlimit) → Position/Zustand setzen → Fenster per HWND auf den Ziel-Desktop verschieben, **ohne** Desktop-Wechsel → am Ende einmal den zuletzt aktiven Desktop aktivieren. |
 | Doppelstarts | Läuft ein Programm schon, wird es nie erneut gestartet. Single-Instance-Apps (Steam, Discord, Spotify …) und Browser werden genau einmal gestartet. |
-| Browser | Firefox, Chrome, Edge, Brave, Vivaldi, Opera werden ohne URLs gestartet – ihre eigene Sitzungswiederherstellung öffnet Fenster und Tabs. DeskRecall ordnet die Fenster per Titel/Größe den Desktops zu. Es werden **keine** Browserdaten, Passwörter oder Cookies gelesen. |
+| Browser | Firefox, Chrome, Edge, Brave, Vivaldi, Opera werden ohne URLs gestartet – ihre eigene Sitzungswiederherstellung öffnet Fenster und Tabs. DeskRecall ordnet die Fenster per Titel/Größe den Desktops zu. Im Widget werden Fenster und Tab-Titel über UI Automation angezeigt (im Hintergrund, gedrosselt, nur solange das Widget sichtbar ist). Es werden **keine** Browserdaten, URLs, Verläufe, Passwörter oder Cookies gelesen. |
 | Regeln | Pro Programm (optional Titel): Ziel-Desktop, Monitor, Startzustand, nie automatisch starten, ausschließen, live anwenden. Einzeln schaltbar, Vorrang vor der Sitzung, oberste passende Regel gewinnt je Eigenschaft. |
 | Profile | Erstellen, laden, aktualisieren, umbenennen, duplizieren, löschen, exportieren, importieren. Beim Laden wird nichts geschlossen; zusätzliche Fenster werden nur nach ausdrücklicher Bestätigung geschlossen (höflich per `WM_CLOSE`). |
 | Verlauf | Einstellbare Anzahl (Standard 25), unveränderte automatische Sicherungen werden nicht dupliziert, jede frühere Sitzung wiederherstellbar. |
@@ -77,6 +81,7 @@ DeskRecall stellt die **Fensteranordnung** wieder her, nicht den **inneren Zusta
 - Programme öffnen nach dem Start, was **sie selbst** vorsehen. Browser stellen Tabs über ihre eigene Sitzungswiederherstellung wieder her (in Chrome/Edge/Brave/Vivaldi/Opera ggf. „Beim Start: Da weitermachen, wo ich aufgehört habe“ aktivieren; in Firefox „Vorherige Sitzung wiederherstellen“).
 - Dokumente/Projekte werden nur dann wieder geöffnet, wenn das Programm sie als Befehlszeilenargument erhalten hatte (z. B. VS Code, Visual Studio, Notepad++, Photoshop beim Öffnen per Doppelklick). Programme, die Projekte intern öffnen (z. B. DaVinci Resolve), starten mit ihrer eigenen Startseite/letztem Projekt.
 - Programme mit mehreren gleichartigen Fenstern ohne aussagekräftigen Titel werden bestmöglich nach Größe/Position zugeordnet.
+- Browser-Tabs: DeskRecall sieht nur, was die Tableiste per UI Automation zeigt (Titel und Auswahl, keine URLs). Eigene Tab-Namen hängen daher am Titel – ändert eine Seite ihren Titel stark, greift der eigene Name nicht mehr. Tabs in Firefox lassen sich je nach Version etwas weniger zuverlässig auswählen als in Chromium-Browsern. Tab-Gruppen und eingeklappte Gruppen zeigt der Browser ggf. nicht als einzelne Tabs.
 - Explorer: pro Explorer-Fenster wird der Ordner des aktiven Tabs wiederhergestellt, nicht alle Tabs.
 - Programme, die mit Administratorrechten liefen, startet DeskRecall nur nach Ihrer Zustimmung (UAC). Fenster solcher Programme kann eine Anwendung ohne Adminrechte nicht verschieben (Windows-Sicherheitsgrenze).
 - Store-/UWP-Apps werden über ihre AppUserModelID gestartet; einige Apps lassen sich nicht minimiert starten.
@@ -92,6 +97,7 @@ settings.json                Einstellungen (unbekannte Felder bleiben bei Update
 sessions\last-session.json   letzte Sitzung (+ .bak)
 sessions\history\*.json      Verlauf
 profiles\*.profile.json      Profile
+tab-names.json               eigene Tab-Namen (nur in DeskRecall)
 logs\deskrecall-JJJJMMTT.log Protokoll (14 Tage)
 ```
 

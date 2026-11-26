@@ -9,6 +9,8 @@ namespace DeskRecall.Platform.VirtualDesktops;
 public sealed class ComThread : IDisposable
 {
     private readonly BlockingCollection<Action> _queue = new();
+    // Vorrang für Benutzeraktionen (Desktop wechseln): wird vor wartenden Hintergrund-Abfragen ausgeführt.
+    private readonly BlockingCollection<Action> _urgent = new();
     private readonly Thread _thread;
 
     public ComThread(string name)
@@ -20,19 +22,24 @@ public sealed class ComThread : IDisposable
 
     private void Run()
     {
-        foreach (var action in _queue.GetConsumingEnumerable())
+        var queues = new[] { _urgent, _queue };
+        while (true)
         {
+            Action action;
+            try { BlockingCollection<Action>.TakeFromAny(queues, out action!); }
+            catch (ArgumentException) { return; }        // beide Warteschlangen abgeschlossen
+            catch (InvalidOperationException) { return; }
             try { action(); } catch { /* Fehler werden über die TaskCompletionSource gemeldet */ }
         }
     }
 
     public bool IsCurrent => Thread.CurrentThread == _thread;
 
-    public T Invoke<T>(Func<T> func, TimeSpan? timeout = null)
+    public T Invoke<T>(Func<T> func, TimeSpan? timeout = null, bool urgent = false)
     {
         if (IsCurrent) return func();
         var tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _queue.Add(() =>
+        (urgent ? _urgent : _queue).Add(() =>
         {
             try { tcs.SetResult(func()); }
             catch (Exception ex) { tcs.SetException(ex); }
@@ -42,7 +49,7 @@ public sealed class ComThread : IDisposable
         return tcs.Task.GetAwaiter().GetResult();
     }
 
-    public void Invoke(Action action, TimeSpan? timeout = null) => Invoke(() => { action(); return true; }, timeout);
+    public void Invoke(Action action, TimeSpan? timeout = null, bool urgent = false) => Invoke(() => { action(); return true; }, timeout, urgent);
 
-    public void Dispose() => _queue.CompleteAdding();
+    public void Dispose() { _urgent.CompleteAdding(); _queue.CompleteAdding(); }
 }

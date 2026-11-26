@@ -361,10 +361,13 @@ public sealed class DiagnosticsViewModel : ObservableObject
     private readonly IVirtualDesktopService _vd;
     private readonly AppController _controller;
     private readonly ISettingsService _settings;
+    private readonly DesktopManager _desktops;
+    private readonly TabService _tabs;
 
-    public DiagnosticsViewModel(ILogService log, CompatibilityService compat, IVirtualDesktopService vd, AppController controller, ISettingsService settings)
+    public DiagnosticsViewModel(ILogService log, CompatibilityService compat, IVirtualDesktopService vd, AppController controller, ISettingsService settings,
+        DesktopManager desktops, TabService tabs)
     {
-        Log = log; _compat = compat; _vd = vd; _controller = controller; _settings = settings;
+        Log = log; _compat = compat; _vd = vd; _controller = controller; _settings = settings; _desktops = desktops; _tabs = tabs;
         Log.EntryAdded += e => Application.Current.Dispatcher.BeginInvoke(() =>
         {
             Entries.Insert(0, e);
@@ -415,6 +418,10 @@ public sealed class DiagnosticsViewModel : ObservableObject
             var skip = _controller.LastRefreshSkippedUi ? ", Oberfläche unverändert" : "";
             lines.Add($"Letzte Aktualisierung: {ms:0} ms, {_controller.LastRefreshWindowCount} Fenster{skip}");
         }
+        if (_desktops.LastTiming is { } timing)
+            lines.Add($"Letzter Wechsel – {timing.Describe()}, Klick bis Start {_desktops.LastClickLatency.TotalMilliseconds:0} ms");
+        if (_tabs.LastReadWindows > 0)
+            lines.Add($"Browser-Tabs lesen: {_tabs.LastReadDuration.TotalMilliseconds:0} ms für {_tabs.LastReadWindows} Fenster");
         Report = string.Join("\n", lines);
 
         var r = _controller.LastReport;
